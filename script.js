@@ -1,8 +1,8 @@
-window.onload = function() {
+window.addEventListener("load", event => {
   for (let element of document.querySelectorAll(".vertedge-viewer")) {
     new VertedgeViewer(element);
   }
-}
+});
 
 
 class Vertex {
@@ -70,7 +70,7 @@ class Vertex {
     copy.lineDash = this.lineDash.slice();
     return copy;
   }
-  
+
 }
 
 
@@ -164,7 +164,7 @@ class VertedgeViewer {
 
   constructor(element) {
     this.element = element;
-    
+
     this.canvas = document.createElement("canvas");
     this.canvas.width = 0;
     this.canvas.height = 0;
@@ -203,7 +203,7 @@ class VertedgeViewer {
     this.styleMenu.appendChild(this.makeSeparator());
     this.styleMenu.appendChild(this.makeHSpread("choose-vertex-shape", "Shape", ["circle", "square", "diamond"]));
     this.element.appendChild(this.styleMenu);
-    
+
     this.gridMenu = document.createElement("div");
     this.gridMenu.className = "vertedge-menu";
     this.gridMenu.textContent = "Grid Settings";
@@ -237,7 +237,7 @@ class VertedgeViewer {
     this.edges = [];
 
     this.resizeEvent();
-    
+
     this.load("graphs/complete-5.json");
   }
 
@@ -318,7 +318,7 @@ class VertedgeViewer {
     // Open style menu if using style tool and an element is selected
     if (this.mode === 3 && this.selection.length > 0) {
       this.styleMenu.style = "transform: translateX(-300px); opacity: 1;";
-      
+
       let selectedVertices = this.selection.filter(element => element instanceof Vertex);
       let shape = null;
       for (let vertex of selectedVertices) {
@@ -358,18 +358,18 @@ class VertedgeViewer {
     if (document.querySelector("#toggle-snap-grid").checked) {
       let topLeft = this.transform.inverse().transformPoint(new DOMPoint(0, 0));
       let bottomRight = this.transform.inverse().transformPoint(new DOMPoint(this.canvas.width, this.canvas.height));
-      
+
       this.ctx.strokeStyle = "#fff1";
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([]);
-      
+
       for (let x = Math.floor(topLeft.x / this.grid[0]) * this.grid[0]; x <= Math.ceil(bottomRight.x / this.grid[0]) * this.grid[0]; x += this.grid[0]) {
         this.ctx.beginPath();
         this.ctx.moveTo(x, topLeft.y);
         this.ctx.lineTo(x, bottomRight.y);
         this.ctx.stroke();
       }
-      
+
       for (let y = Math.floor(topLeft.y / this.grid[1]) * this.grid[1]; y <= Math.ceil(bottomRight.y / this.grid[1]) * this.grid[1]; y += this.grid[1]) {
         this.ctx.beginPath();
         this.ctx.moveTo(topLeft.x, y);
@@ -444,7 +444,7 @@ class VertedgeViewer {
 
     let x = (isTouch ? event.touches[0].pageX - this.element.offsetLeft : event.pageX - this.element.offsetLeft) * window.devicePixelRatio;
     let y = (isTouch ? event.touches[0].pageY - this.element.offsetTop : event.pageY - this.element.offsetTop) * window.devicePixelRatio;
-    
+
     this.mousePos.x = x;
     this.mousePos.y = y;
 
@@ -452,7 +452,7 @@ class VertedgeViewer {
       this.dragging = true;
       let p = this.snapToGrid(x, y, true);
       let element = this.elementAt(x, y);
-      
+
       if (this.mode === 1) {
         if (element === null) {
           let placed = new Vertex(p.x, p.y);
@@ -486,7 +486,7 @@ class VertedgeViewer {
           element = null;
         }
       }
-      
+
       let origElem = null;
       if (element !== null) {
         origElem = element.copy();
@@ -495,7 +495,7 @@ class VertedgeViewer {
         origElem.lineWidth = 2;
         origElem.lineDash = [4, 4];
       }
-      
+
       const index = element === null ? -1 : (element instanceof Vertex ? this.vertices.indexOf(element) : this.edges.indexOf(element));
       this.drag = {x: x, y: y, transform: this.transform, element: origElem, elemIdx: index};
 
@@ -523,7 +523,7 @@ class VertedgeViewer {
 
     let x = (isTouch ? event.touches[0].pageX - this.element.offsetLeft : event.pageX - this.element.offsetLeft) * window.devicePixelRatio;
     let y = (isTouch ? event.touches[0].pageY - this.element.offsetTop : event.pageY - this.element.offsetTop) * window.devicePixelRatio;
-    
+
     if (event.target === this.canvas) {
       this.mousePos.x = x;
       this.mousePos.y = y;
@@ -536,13 +536,13 @@ class VertedgeViewer {
       this.update();
       return;
     }
-    
+
     if (this.drag === null || !isTouch && event.buttons !== 1 || event.offsetX === 0 && event.offsetY === 0) return;
 
     let revert = Math.abs(x - this.drag.x) <= 8 * window.devicePixelRatio && Math.abs(y - this.drag.y) <= 8 * window.devicePixelRatio;
     let dx = (x - this.drag.x) / window.devicePixelRatio;
     let dy = (y - this.drag.y) / window.devicePixelRatio;
-    
+
     if (this.drag.element === null) {
       this.transform = revert ? this.drag.transform.translate(0, 0) : this.drag.transform.translate(dx, dy);
     } else if (this.drag.element instanceof Vertex) {
@@ -567,7 +567,7 @@ class VertedgeViewer {
 
   mouseReleaseEvent(event) {
     const isTouch = event.touches !== undefined;
-    
+
     if (isTouch || event.button === 0) {
       this.dragging = false;
       this.drag = null;
@@ -579,7 +579,7 @@ class VertedgeViewer {
   wheelEvent(event) {
     event.preventDefault();
     event.stopPropagation();
-    
+
     if (this.dragging) return;
     //this.zoom(-event.deltaY / 100, [event.offsetX, event.offsetY]);
   }
@@ -587,7 +587,7 @@ class VertedgeViewer {
   keyEvent(event) {
     // TODO: esc doesn't call this event for some reason?
     let key = event.code.toLowerCase();
-    
+
     if (key === "keyv") this.mode = 0;
     else if (key === "keyd") this.mode = 1;
     else if (key === "keyx") this.mode = 2;
@@ -599,7 +599,7 @@ class VertedgeViewer {
 
     event.preventDefault();
     event.stopPropagation();
-    
+
     this.update();
   }
 
@@ -609,7 +609,7 @@ class VertedgeViewer {
         if (element instanceof Vertex) element.shape = value;
       }
     }
-    
+
     this.update();
   }
 
@@ -619,7 +619,7 @@ class VertedgeViewer {
     if (document.querySelector("#toggle-snap-grid").checked) {
       pos = new DOMPoint(Math.round(pos.x / this.grid[0]) * this.grid[0], Math.round(pos.y / this.grid[1]) * this.grid[1]);
     }
-    
+
     return pos;
   }
 
@@ -677,5 +677,5 @@ class VertedgeViewer {
       this.ctrlOpener.style.transform = "";
     }
   }
-  
+
 }
