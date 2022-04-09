@@ -1,0 +1,6 @@
+<svg version="1.1" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+    <g fill="none" stroke="#ccc" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+        <path d="M 24 16 a 8 8 0 1 0 -8 8 c 1 0 1 -1.5 0 -2 c -1 -0.5 -1 -2 0 -2 c 8 0 8 -2 8 -4"/>
+        <path fill="#ccc" stroke="none" d="M 9.5 15.5 a 1.5 1.5 0 0 0 3 0 a 1.5 1.5 0 0 0 -3 0 M 12 11.5 a 1.5 1.5 0 0 0 3 0 a 1.5 1.5 0 0 0 -3 0 M 17 11.5 a 1.5 1.5 0 0 0 3 0 a 1.5 1.5 0 0 0 -3 0 M 19.5 15.5 a 1.5 1.5 0 0 0 3 0 a 1.5 1.5 0 0 0 -3 0"/>
+    </g>
+</svg>
