@@ -1,5 +1,7 @@
+const vertedgeApps = [];
+
 window.addEventListener("load", event => {
-  populateAppers(VertedgeApplication, "vertedge-application");
+  populateAppers(VertedgeApplication, "vertedge-application", vertedgeApps);
 });
 
 
@@ -21,20 +23,20 @@ class Vertex {
     if (this.shape === 1) {
       ctx.rect(this.x - this.r, this.y - this.r, 2 * this.r, 2 * this.r);
     } else if (this.shape === 2) {
-      ctx.moveTo(this.x, this.y - this.r);
-      ctx.lineTo(this.x - this.r, this.y);
-      ctx.lineTo(this.x, this.y + this.r);
-      ctx.lineTo(this.x + this.r, this.y);
+      ctx.moveTo(this.x, this.y - 1.3 * this.r);
+      ctx.lineTo(this.x - 1.3 * this.r, this.y);
+      ctx.lineTo(this.x, this.y + 1.3 * this.r);
+      ctx.lineTo(this.x + 1.3 * this.r, this.y);
       ctx.closePath();
     } else {
       ctx.ellipse(this.x, this.y, this.r, this.r, 0, 0, 2 * Math.PI);
     }
   }
 
-  draw(ctx, select, highlight) {
-    // Add highlight if selected
-    if (select) {
-      ctx.strokeStyle = `#${highlight}cc`;
+  draw(ctx, hover, select, highlight) {
+    // Add highlight if hovered or selected
+    if (hover || select) {
+      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
       ctx.lineWidth = this.lineWidth + 4;
       ctx.setLineDash([]);
       this.path(ctx);
@@ -68,7 +70,7 @@ class Vertex {
     copy.shape = this.shape;
     return copy;
   }
-
+  
 }
 
 
@@ -90,10 +92,10 @@ class Edge {
     else ctx.quadraticCurveTo(this.cp.x, this.cp.y, this.v2.x, this.v2.y);
   }
 
-  draw(ctx, select, highlight) {
-    // Add highlight if selected
-    if (select) {
-      ctx.strokeStyle = `#${highlight}cc`;
+  draw(ctx, hover, select, highlight) {
+    // Add highlight if hovered or selected
+    if (hover || select) {
+      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
       ctx.lineWidth = this.lineWidth + 4;
       ctx.setLineDash([]);
       this.path(ctx);
@@ -114,7 +116,8 @@ class Edge {
       ctx.beginPath();
       ctx.moveTo(this.v1.x, this.v1.y);
       ctx.lineTo(this.cp.x, this.cp.y);
-      ctx.lineTo(this.v2.x, this.v2.y);
+      ctx.moveTo(this.v2.x, this.v2.y);
+      ctx.lineTo(this.cp.x, this.cp.y);
       ctx.stroke();
       // Draw diamond at control point
       ctx.fillStyle = `#${highlight}cc`;
@@ -147,7 +150,7 @@ class Edge {
   }
 
   copy() {
-    let copy = new Edge(this.v1, this.v2);
+    let copy = new Edge(this.v1.copy(), this.v2.copy());
     copy.cp = this.cp === null ? null : this.cp.copy();
     copy.stroke = this.stroke;
     copy.lineWidth = this.lineWidth;
@@ -158,9 +161,19 @@ class Edge {
 }
 
 
+// Position at t (quadratic beziér): t²r + 2t(1-t)q + (1-t)²p
+const curveQ = (t, p, q, r) => r.mul(t*t).add(q.mul(2*t*(1-t))).add(p.mul((1-t)*(1-t)));
+// Velocity at t (quadratic beziér): 2tr + (2(1-t)-2t)q - 2(1-t)p
+const curveQDelta = (t, p, q, r) => r.mul(2*t).add(q.mul(2*(1-t)-2*t)).sub(p.mul(2*(1-t)));
+
+const ptOrient = (p1, p2, p3) => Math.sign((p2.y-p1.y)*(p3.x-p2.x) - (p2.x-p1.x)*(p3.y-p2.y));
+const linesIntersect = (p1, q1, p2, q2) => ptOrient(p1, q1, p2) != ptOrient(p1, q1, q2) && ptOrient(p2, q2, p1) != ptOrient(p2, q2, q1);
+
+
 class VertedgeApplication extends ApperApplication {
 
   get dragging() { return this.drag !== null; }
+  get grid() { return {x: this.gridWidthInput.value, y: this.gridHeightInput.value}; }
 
   constructor(element) {
     super(element);
@@ -180,10 +193,24 @@ class VertedgeApplication extends ApperApplication {
     let icons = ["icons/shape-circle.svg", "icons/shape-square.svg", "icons/shape-diamond.svg"];
     this.addMenu(0, "Element Style")
       .addSeparator()
-      .add(this.vertexShape = new ApperHSpread("vertedge-vertex-shape", "Shape:", icons)
+      .add(this.shapeInput = new ApperHSpread("vertedge-vertex-shape", "Shape:", icons)
         .onChange(value => {
           this.selection.forEach(element => {
             if (element instanceof Vertex) element.shape = value;
+          });
+          this.update();
+        }))
+      .add(this.radiusInput = new ApperNumberInput("vertedge-radius", "Radius:", "icons/radius.svg")
+        .onChange(value => {
+          this.selection.forEach(element => {
+            if (element instanceof Vertex) element.r = value;
+          });
+          this.update();
+        }))
+      .add(this.lineWidthInput = new ApperNumberInput("vertedge-line-width", "Line width:", "icons/line-width.svg")
+        .onChange(value => {
+          this.selection.forEach(element => {
+            element.lineWidth = value;
           });
           this.update();
         }));
@@ -191,6 +218,10 @@ class VertedgeApplication extends ApperApplication {
     this.addMenu(1, "Grid Settings")
       .addSeparator()
       .add(this.enableGrid = new ApperCheckbox("vertedge-enable-grid", "Enable grid")
+        .onChange(value => this.update()))
+      .add(this.gridWidthInput = new ApperNumberInput("vertedge-grid-width", "Horizontal spacing:", "icons/width.svg", 50)
+        .onChange(value => this.update()))
+      .add(this.gridHeightInput = new ApperNumberInput("vertedge-grid-height", "Vertical spacing:", "icons/height.svg", 50)
         .onChange(value => this.update()));
 
     this.addMenu(2, "Raw Graph Data")
@@ -231,7 +262,6 @@ class VertedgeApplication extends ApperApplication {
     this.defaultTitle = "Untitled Graph";
 
     this.selection = [];
-    this.grid = [50, 50];
 
     this.drag = null;
     this.waitingForVertex = null;
@@ -241,7 +271,7 @@ class VertedgeApplication extends ApperApplication {
     this.edges = [];
 
     this.update();
-
+    
     if (window.location.hash) this.load(window.location.hash.slice(1));
   }
 
@@ -256,17 +286,46 @@ class VertedgeApplication extends ApperApplication {
 
     // Update style menu
     if (this.toolbar.tool === 4 && this.selection.length > 0) {
-      let shape = null;
-      for (let element of this.selection) {
-        if (element instanceof Vertex)
-          if (shape === null) shape = element.shape;
-          else if (element.shape !== shape) {
-            shape = null;
-            break;
-          }
+      if (this.selection.some(element => element instanceof Vertex)) {
+        this.shapeInput.element.style.display = "";
+        this.radiusInput.element.style.display = "";
+        
+        let shape = null;
+        for (let element of this.selection) {
+          if (element instanceof Vertex)
+            if (shape === null) shape = element.shape;
+            else if (element.shape !== shape) {
+              shape = null;
+              break;
+            }
+        }
+        this.shapeInput.value = shape;
+  
+        let radius = null;
+        for (let element of this.selection) {
+          if (element instanceof Vertex)
+            if (radius === null) radius = element.r;
+            else if (element.r !== radius) {
+              radius = null;
+              break;
+            }
+        }
+        this.radiusInput.value = radius === null ? 10 : radius;
+      } else {
+        this.shapeInput.element.style.display = "none";
+        this.radiusInput.element.style.display = "none";
       }
-      this.vertexShape.value = shape;
 
+      let lineWidth = null;
+      for (let element of this.selection) {
+        if (lineWidth === null) lineWidth = element.lineWidth;
+        else if (element.lineWidth !== lineWidth) {
+          lineWidth = null;
+          break;
+        }
+      }
+      this.lineWidthInput.value = lineWidth === null ? 4 : lineWidth;
+      
       this.menu(0).show();
     } else this.menu(0).hide();
 
@@ -277,7 +336,7 @@ class VertedgeApplication extends ApperApplication {
     // Update data menu
     if (this.toolbar.tool === 6) {
       if (!this.dataEditor.editing) this.dataEditor.text = this.graphData;
-
+      
       this.menu(2).show();
     } else this.menu(2).hide();
 
@@ -300,20 +359,21 @@ class VertedgeApplication extends ApperApplication {
 
     // Draw grid if enabled
     if (this.enableGrid.checked) {
+      let grid = this.grid;
       let topLeft = this.getWorldPos(new ApperPoint());
       let bottomRight = this.getWorldPos(new ApperPoint(this.canvas.width, this.canvas.height));
-
+      
       this.ctx.strokeStyle = "#fff1";
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([]);
       this.ctx.beginPath();
-
-      for (let x = Math.floor(topLeft.x / this.grid[0]) * this.grid[0]; x <= Math.ceil(bottomRight.x / this.grid[0]) * this.grid[0]; x += this.grid[0]) {
+      
+      for (let x = Math.floor(topLeft.x / grid.x) * grid.x; x <= Math.ceil(bottomRight.x / grid.x) * grid.x; x += grid.x) {
         this.ctx.moveTo(x, topLeft.y);
         this.ctx.lineTo(x, bottomRight.y);
       }
-
-      for (let y = Math.floor(topLeft.y / this.grid[1]) * this.grid[1]; y <= Math.ceil(bottomRight.y / this.grid[1]) * this.grid[1]; y += this.grid[1]) {
+      
+      for (let y = Math.floor(topLeft.y / grid.y) * grid.y; y <= Math.ceil(bottomRight.y / grid.y) * grid.y; y += grid.y) {
         this.ctx.moveTo(topLeft.x, y);
         this.ctx.lineTo(bottomRight.x, y);
       }
@@ -323,7 +383,7 @@ class VertedgeApplication extends ApperApplication {
 
     if (this.dragging && this.drag.elements.length !== 0) {
       for (let element of this.drag.elements) {
-        element.draw(this.ctx, false, this.color);
+        element.draw(this.ctx, false, false, this.color);
         if (element instanceof Edge && element.cp !== null) {
           this.ctx.strokeStyle = `#${this.color}77`;
           this.ctx.lineWidth = 2;
@@ -337,14 +397,14 @@ class VertedgeApplication extends ApperApplication {
 
     // Draw edges, then vertices (later index -> higher z)
     this.edges.forEach(edge => {
-      edge.draw(this.ctx, this.selection.includes(edge) || (this.toolbar.tool === 2 || this.toolbar.tool === 3) && element === edge, this.color);
+      edge.draw(this.ctx, element === edge, this.selection.includes(edge), this.color);
     });
     this.vertices.forEach(vertex => {
-      vertex.draw(this.ctx, this.selection.includes(vertex) || (this.toolbar.tool === 2 || this.toolbar.tool === 3) && element === vertex, this.color);
+      vertex.draw(this.ctx, element === vertex, this.selection.includes(vertex), this.color);
     });
 
-    // If in draw or erase mode, add extra indicators
-    if ((this.toolbar.tool === 2 || this.toolbar.tool === 3) && !this.cursorPos.equals(0, 0)) {
+    // Add cursor dot and other cursor-related indicators
+    if (!this.cursorPos.equals(0, 0)) {
       const worldPos = this.toolbar.tool === 2 ? this.snapToGrid(this.getWorldPos(this.cursorPos)) : this.getWorldPos(this.cursorPos);
       if (this.toolbar.tool === 2 && this.waitingForVertex !== null) {
         this.ctx.strokeStyle = `#${this.color}aa`;
@@ -385,7 +445,7 @@ class VertedgeApplication extends ApperApplication {
     if (event.leftBtn) {
       let p = this.snapToGrid(event.worldPos);
       let element = this.toolbar.tool === 1 ? null : this.elementAt(event.screenPos);
-
+      
       if (this.toolbar.tool === 2) {
         if (element === null) {
           let placed = new Vertex(p.x, p.y);
@@ -405,8 +465,34 @@ class VertedgeApplication extends ApperApplication {
           let placed = new Vertex(p.x, p.y);
           this.vertices.push(placed);
           let other = new Edge(placed, element.v2);
+          if (element.cp !== null) {
+            let p0 = new ApperPoint(element.v1);
+            let p1 = new ApperPoint(element.v2);
+            let cp = element.cp.copy();
+            let tc = 0;
+            let closest = Infinity;
+            let lastTest = Infinity;
+            for (let t = 0; t <= 1; t += 0.01) {
+              let pos = curveQ(t, p0, cp, p1);
+              let delta = curveQDelta(t, p0, cp, p1);
+              // The only part of test we need is its roots, so this doesn't match derivative of distance otherwise
+              let test = (pos.x - p.x) * delta.x + (pos.y - p.y) * delta.y;
+              if (t === 0 || t === 1 || lastTest <= 0 && test >= 0) {
+                let dist = Math.hypot(p.x - pos.x, p.y - pos.y);
+                if (dist < closest) {
+                  closest = dist;
+                  tc = t;
+                }
+              }
+              lastTest = test;
+            }
+            let pos = curveQ(tc, p0, cp, p1);
+            placed.x = pos.x;
+            placed.y = pos.y;
+            element.cp.set(tc*cp.x + (1-tc)*p0.x, tc*cp.y + (1-tc)*p0.y);
+            other.cp = new ApperPoint(tc*p1.x + (1-tc)*cp.x, tc*p1.y + (1-tc)*cp.y);
+          }
           element.v2 = placed;
-          element.cp = null; // TODO: approximate curve?
           this.edges.push(other);
           element = placed;
           if (this.waitingForVertex !== null) {
@@ -450,7 +536,7 @@ class VertedgeApplication extends ApperApplication {
         transform: this.transform,
         elements, indices
       };
-
+      
       if (elements.length === 1 && elements[0] instanceof Edge && elements[0].cp === null) {
         this.drag.elements[0].cp = p.copy();
       }
@@ -460,9 +546,8 @@ class VertedgeApplication extends ApperApplication {
   }
 
   mouseMove(event) {
-    if (!this.dragging && (this.toolbar.tool === 2 || this.toolbar.tool === 3)) return true;
-
-    if (!this.dragging || !event.leftBtn || event.screenPos.equals(0, 0)) return false;
+    if (event.screenPos.equals(0, 0)) return false;
+    if (!this.dragging) return true;
 
     let revert = Math.abs(event.screenPos.x - this.drag.x) <= 8 * this.pixelRatio && Math.abs(event.screenPos.y - this.drag.y) <= 8 * this.pixelRatio;
     let dx = (event.screenPos.x - this.drag.x) / this.pixelRatio;
@@ -473,11 +558,11 @@ class VertedgeApplication extends ApperApplication {
 
     } else if (!this.drag.elements.length) {
       // TODO: update selection w/ selectbox
-
+      
     } else for (let i = 0; i < this.drag.elements.length; i++) {
       let element = this.drag.elements[i];
       let index = this.drag.indices[i];
-
+        
       if (element instanceof Vertex) {
         let vertex = this.vertices[index];
         let p = revert ? new ApperPoint(element) : this.snapToGrid(new ApperPoint(element).add(dx, dy));
@@ -489,18 +574,22 @@ class VertedgeApplication extends ApperApplication {
           vertex.x = p.x;
           vertex.y = p.y;
         }
-
-      } else if (this.drag.elements.length === 1 && element instanceof Edge) {
+        
+      } else if (element instanceof Edge) {
         let edge = this.edges[index];
-        if (edge.cp === null) edge.cp = new ApperPoint();
-        let p = revert ? element.cp : this.snapToGrid(element.cp.add(dx, dy));
-        edge.cp.set(p);
-
-        const v1 = edge.v1;
-        const v2 = edge.v2;
-        const cp = edge.cp;
-        const angleDiff = Math.acos(((cp.x - v1.x) * (v2.x - cp.x) + (cp.y - v1.y) * (v2.y - cp.y)) / (Math.hypot(cp.x - v1.x, cp.y - v1.y) * Math.hypot(v2.x - cp.x, v2.y - cp.y)));
-        if (angleDiff < 0.3) edge.cp = null;
+        if (this.drag.elements.length === 1) {
+          if (edge.cp === null) edge.cp = new ApperPoint();
+          let p = revert ? element.cp : this.snapToGrid(element.cp.add(dx, dy));
+          edge.cp.set(p);
+    
+          const v1 = edge.v1;
+          const v2 = edge.v2;
+          const cp = edge.cp;
+          const angleDiff = Math.acos(((cp.x - v1.x) * (v2.x - cp.x) + (cp.y - v1.y) * (v2.y - cp.y)) / (Math.hypot(cp.x - v1.x, cp.y - v1.y) * Math.hypot(v2.x - cp.x, v2.y - cp.y)));
+          if (angleDiff < 0.3) edge.cp = null;
+        } else if (edge.cp !== null && element.cp !== null) {
+          edge.cp.set(this.snapToGrid(element.cp.add(dx, dy)))
+        }
       }
     }
 
@@ -527,11 +616,33 @@ class VertedgeApplication extends ApperApplication {
       } else if (this.toolbar.tool !== 1 && !this.drag.elements.length) {
         if (!event.shiftKey) this.selection = [];
         let selectBox = new ApperRect(this.drag.x, this.drag.y, this.cursorPos.x - this.drag.x, this.cursorPos.y - this.drag.y).transform(this.transform.inverse());
-        let select = [];
-        select = select.concat(this.vertices.filter(vertex => {
+        this.vertices.filter(vertex => {
           return selectBox.intersects(new ApperRect(vertex.x - vertex.r, vertex.y - vertex.r, 2 * vertex.r, 2 * vertex.r));
-        }));
-        this.selection = this.selection.concat(select);
+        }).concat(this.edges.filter(edge => {
+          if (selectBox.contains(edge.v1) || selectBox.contains(edge.v2)) return true;
+          if (edge.cp === null) {
+            return linesIntersect(edge.v1, edge.v2, selectBox.xy, selectBox.Xy)
+                || linesIntersect(edge.v1, edge.v2, selectBox.Xy, selectBox.XY)
+                || linesIntersect(edge.v1, edge.v2, selectBox.XY, selectBox.xY)
+                || linesIntersect(edge.v1, edge.v2, selectBox.xY, selectBox.xy);
+          } else {
+            let bounds = [
+              Math.min(edge.v1.x, edge.cp.x, edge.v2.x),
+              Math.max(edge.v1.x, edge.cp.x, edge.v2.x),
+              Math.min(edge.v1.y, edge.cp.y, edge.v2.y),
+              Math.max(edge.v1.y, edge.cp.y, edge.v2.y)
+            ];
+            if (!selectBox.intersects(new ApperRect(bounds[0], bounds[2], bounds[1] - bounds[0], bounds[3] - bounds[2]))) return false;
+            let v1 = new ApperPoint(edge.v1);
+            let v2 = new ApperPoint(edge.v2);
+            for (let t = 0; t <= 1; t += 0.01) {
+              if (selectBox.contains(curveQ(t, v1, edge.cp, v2))) return true;
+            }
+            return false;
+          }
+        })).forEach(selected => {
+          if (!this.selection.includes(selected)) this.selection.push(selected);
+        });
       }
       this.drag = null;
       return true;
@@ -560,7 +671,7 @@ class VertedgeApplication extends ApperApplication {
 
   snapToGrid(pos) {
     if (this.enableGrid.checked)
-      return new ApperPoint(Math.round(pos.x / this.grid[0]) * this.grid[0], Math.round(pos.y / this.grid[1]) * this.grid[1]);
+      return new ApperPoint(Math.round(pos.x / this.grid.x) * this.grid.x, Math.round(pos.y / this.grid.y) * this.grid.y);
     return pos;
   }
 
@@ -593,7 +704,7 @@ class VertedgeApplication extends ApperApplication {
   centerView() {
     let oldCenter = this.getWorldPos(new ApperPoint(this.canvas.width, this.canvas.height).mul(0.5));
     this.transform = this.transform.translate(oldCenter.x, oldCenter.y);
-
+    
     if (this.vertices.length) {
       let l = Infinity, r = -Infinity, b = Infinity, t = -Infinity;
       for (let vertex of this.vertices) {
@@ -610,7 +721,7 @@ class VertedgeApplication extends ApperApplication {
 
   load(url) {
     this.title = "Loading...";
-
+    
     fetch(url)
       .then(response => response.json(), error => {
         console.error(error);
@@ -630,7 +741,7 @@ class VertedgeApplication extends ApperApplication {
   loadFromData(data) {
     this.vertices = [];
     this.edges = [];
-
+    
     data.vertices.forEach(raw => {
       let vertex = new Vertex(raw.x, raw.y);
       if (raw.r !== undefined) vertex.r = raw.r;
@@ -641,7 +752,7 @@ class VertedgeApplication extends ApperApplication {
       if (raw.shape !== undefined) vertex.shape = raw.shape;
       this.vertices.push(vertex);
     });
-
+    
     data.edges.forEach(raw => {
       let edge = new Edge(this.vertices[raw.v1], this.vertices[raw.v2]);
       if (raw.cp !== undefined) edge.cp = new ApperPoint(raw.cp[0], raw.cp[1]);
@@ -650,10 +761,10 @@ class VertedgeApplication extends ApperApplication {
       if (raw.lineDash !== undefined) edge.lineDash = raw.lineDash.slice();
       this.edges.push(edge);
     });
-
+    
     if (data.title !== undefined) this.title = data.title;
     else this.title = this.defaultTitle;
-
+    
     this.update();
   }
 
@@ -675,9 +786,9 @@ class VertedgeApplication extends ApperApplication {
       lineWidth: edge.lineWidth === 4 ? undefined : edge.lineWidth,
       lineDash: !edge.lineDash.length ? undefined : edge.lineDash.slice(),
     }});
-
+    
     let graph = {title: this.title, vertices, edges};
     return JSON.stringify(graph);
   }
-
+  
 }
