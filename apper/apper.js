@@ -103,6 +103,9 @@ class ApperRect {
   get h() { return this.#size.y; }
   set h(h) { return this.#size.y = h; }
 
+  get X() { return this.#pos.x + this.#size.x; }
+  get Y() { return this.#pos.y + this.#size.y; }
+
   get xy() { return new ApperPoint(this.x, this.y); }
   get Xy() { return new ApperPoint(this.x + this.w, this.y); }
   get xY() { return new ApperPoint(this.x, this.y + this.h); }
@@ -115,6 +118,10 @@ class ApperRect {
   constructor(x, y, w, h) {
     this.#pos = new ApperPoint(x, y);
     this.#size = new ApperPoint(w, h);
+  }
+
+  copy() {
+    return new ApperRect(this.#pos.x, this.#pos.y, this.#size.x, this.#size.y);
   }
 
   contains(point) {
@@ -219,6 +226,82 @@ class ApperToolbar {
     return this;
   }
   
+}
+
+
+class ApperParagraph {
+
+  #element;
+
+  get element() { return this.#element; }
+  get text() { return this.#element.textContent; }
+  set text(content) { return this.#element.textContent = content; }
+
+  constructor(content = "") {
+    this.#element = document.createElement("p");
+    this.#element.className = "apper-paragraph";
+    this.#element.textContent = content;
+  }
+
+  show() {
+    this.#element.style.display = "";
+
+    return this;
+  }
+
+  hide() {
+    this.#element.style.display = "none";
+
+    return this;
+  }
+
+}
+
+
+class ApperButton {
+
+  #element;
+  #name;
+  
+  get element() { return this.#element; }
+  get name() { return this.#name; }
+  get label() { return this.#element.textContent; }
+  set label(text) { return this.#element.textContent = text; }
+
+  get url() { return this.#element.href; }
+  set url(content) { return this.#element.href = content; }
+  get filename() { return this.#element.download; }
+  set filename(content) { return this.#element.download = content; }
+
+  constructor(label, url = null, filename = null) {
+    this.#element = document.createElement("a");
+    this.#element.className = "apper-button";
+    if (url != null) this.#element.href = url;
+    if (filename != null) this.#element.download = filename;
+    this.#element.textContent = label;
+    this.#element.addEventListener("click", event => {
+      if (this.click !== undefined) this.click();
+    }, {capture: false, passive: true});
+  }
+
+  onClick(callback) {
+    this.click = callback;
+
+    return this;
+  }
+
+  show() {
+    this.#element.style.display = "";
+
+    return this;
+  }
+
+  hide() {
+    this.#element.style.display = "none";
+
+    return this;
+  }
+
 }
 
 
@@ -469,6 +552,53 @@ class ApperNumberInput {
 }
 
 
+class ApperCanvasImage {
+
+  #element;
+  #label;
+  #canvas;
+  #ctx;
+
+  get element() { return this.#element; }
+  get label() { return this.#label.textContent; }
+  set label(text) { return this.#label.textContent = text; }
+  get canvas() { return this.#canvas; }
+  get ctx() { return this.#ctx; }
+
+  constructor(label) {
+    this.#element = document.createElement("div");
+    this.#element.className = "apper-canvas-image";
+
+    this.#label = document.createElement("span");
+    this.#label.textContent = label;
+    this.#element.appendChild(this.#label);
+
+    this.#canvas = document.createElement("canvas");
+    this.#element.appendChild(this.#canvas);
+
+    this.#ctx = this.#canvas.getContext("2d");
+  }
+
+  resize(w, h) {
+    this.#canvas.width = w;
+    this.#canvas.height = h;
+  }
+
+  show() {
+    this.#element.style.display = "";
+
+    return this;
+  }
+
+  hide() {
+    this.#element.style.display = "none";
+
+    return this;
+  }
+
+}
+
+
 class ApperMenu {
 
   #app;
@@ -490,6 +620,7 @@ class ApperMenu {
     this.#frame.appendChild(this.#element);
     
     this.#title = document.createElement("span");
+    this.#title.className = "apper-menu-title";
     this.#title.textContent = title;
     this.#element.appendChild(this.#title);
   }
@@ -519,6 +650,14 @@ class ApperMenu {
     
     return this;
   }
+
+  addText(text) {
+    let container = document.createElement("span");
+    container.textContent = text;
+    this.#element.appendChild(container);
+
+    return this;
+  }
   
 }
 
@@ -535,6 +674,7 @@ class ApperApplication {
   #cursorPos;
   #menus;
   #message;
+  #messageTimer;
 
   get element() { return this.#element; }
   get canvas() { return this.#canvas; }
@@ -577,6 +717,7 @@ class ApperApplication {
     this.#message.className = "apper-message";
     this.#element.appendChild(this.#message);
 
+    this.#messageTimer = null;
     this.#toolbar = null;
     this.#menus = [];
 
@@ -616,7 +757,11 @@ class ApperApplication {
     if (error) this.#message.classList.add("apper-error");
     else this.#message.classList.remove("apper-error");
     this.#message.classList.add("apper-shown");
-    // Queue hiding
+    if (this.#messageTimer !== null) window.clearTimeout(this.#messageTimer);
+    this.#messageTimer = window.setTimeout(() => {
+      this.#message.classList.remove("apper-shown");
+      this.#messageTimer = null;
+    }, 10000);
   }
 
   getScreenPos(worldPos) {

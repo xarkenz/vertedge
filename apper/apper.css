@@ -53,7 +53,7 @@
   left: 50%;
   top: 16px;
   transform: translateX(-50%); /* TODO: this doesn't cooperate with animation */
-  border-radius: 6px;
+  border-radius: 0;
   border: none;
   outline: none;
   border-bottom: 2px solid transparent;
@@ -66,6 +66,10 @@
   caret-color: #ccc;
   transition: border-bottom-color 0.125s;
   animation: 0.5s apper-enter-from-top;
+}
+
+.apper-title:hover {
+  border-bottom-color: #fff1;
 }
 
 .apper-title:focus {
@@ -140,7 +144,7 @@
   box-sizing: border-box;
   flex: 0 0;
   z-index: 3;
-  transition: background 0.25s, border-color 0.25s;
+  transition: background-color 0.25s, border-color 0.25s;
 }
 
 .apper-toolbutton img {
@@ -155,7 +159,7 @@
   left: 8px;
   top: 8px;
   transform: rotate(0deg);
-  transition: background 0.25s, transform 0.5s;
+  transition: background-color 0.25s, transform 0.5s;
   animation: 0.5s apper-fade-in;
 }
 
@@ -235,6 +239,10 @@
   opacity: 1;
 }
 
+.apper-menu span:not(.apper-menu-title) {
+  font-size: 14px;
+}
+
 .apper-menu > div {
   position: absolute;
   width: 100%;
@@ -254,6 +262,39 @@
   height: 2px;
   margin: 8px 0;
   background: #fff2;
+}
+
+
+.apper-paragraph {
+  font-size: 14px;
+}
+
+
+.apper-button {
+  display: block;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: #ccc1;
+  color: #ccc;
+  text-align: center;
+  text-decoration: none;
+  font-size: 14px;
+  font-family: inherit;
+  transition: background-color 0.25s;
+}
+
+.apper-button:hover {
+  background: #ccc3;
+  cursor: pointer;
+}
+
+.apper-button:active {
+  background: #ccc5;
 }
 
 
@@ -281,7 +322,7 @@
   width: 16px;
   border-radius: 4px;
   background: #fff2;
-  transition: background 0.25s;
+  transition: background-color 0.25s;
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -343,7 +384,7 @@
   border: 2px solid transparent;
   box-sizing: border-box;
   flex: 0 0;
-  transition: background 0.25s, border-color 0.25s;
+  transition: background-color 0.25s, border-color 0.25s;
 }
 
 .apper-hspread label > span:hover {
@@ -415,9 +456,9 @@
   background: #ccc1;
   color: #ccc;
   text-align: left;
-  font-size: inherit;
+  font-size: 14px;
   font-family: inherit;
-  transition: background 0.25s;
+  transition: background-color 0.25s;
 }
 
 .apper-button-list > div > button:first-child {
@@ -464,4 +505,30 @@
   position: absolute;
   left: 0;
   top: 6px;
+}
+
+
+.apper-canvas-image {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.apper-canvas-image > span {
+  display: block;
+  text-align: center;
+}
+
+.apper-canvas-image canvas {
+  display: block;
+  position: relative;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 2px solid #fff2;
+  margin: 8px auto;
 }
