@@ -217,6 +217,7 @@ class VertedgeApplication extends ApperApplication {
   constructor(element) {
     super(element);
 
+    this.HOST_URL = "https://raw.githubusercontent.com/xarkenz/vertedge/main/"
     this.BEZIER_SAMPLE_INTERVAL = 0.01;
     this.REVERT_PROXIMITY = 8;
     this.RESIZE_PROXIMITY = 12;
@@ -322,7 +323,7 @@ class VertedgeApplication extends ApperApplication {
     this.selection = [];
 
     this.drag = null;
-    this.waitingForVertex = null;
+    this.firstVertex = null;
     this.color = "";
     this.captureArea = null;
 
@@ -343,7 +344,7 @@ class VertedgeApplication extends ApperApplication {
                : "b762f0";  // purple
     const captureResizeDirection = this.captureResizeDirection;
 
-    if (this.toolbar.tool !== Tool.DRAW) this.waitingForVertex = null;
+    if (this.toolbar.tool !== Tool.DRAW) this.firstVertex = null;
     if (this.toolbar.tool !== Tool.CAPTURE) this.captureArea = null;
 
     if (this.toolbar.tool === Tool.STYLE && this.selection.length > 0) {
@@ -508,21 +509,21 @@ class VertedgeApplication extends ApperApplication {
 
     // Draw edges, then vertices (later index -> higher z)
     this.edges.forEach(edge => {
-      edge.draw(this.ctx, element === edge, this.selection.includes(edge), this.color);
+      edge.draw(this.ctx, !this.dragging && element === edge, this.selection.includes(edge), this.color);
     });
     this.vertices.forEach(vertex => {
-      vertex.draw(this.ctx, element === vertex, this.selection.includes(vertex), this.color);
+      vertex.draw(this.ctx, !this.dragging && element === vertex, this.selection.includes(vertex), this.color);
     });
 
-    // Add cursor dot and other cursor-related indicators
-    if (this.toolbar.tool !== Tool.MOVE && this.toolbar.tool !== Tool.CAPTURE && !this.cursorPos.equals(0, 0)) {
-      const worldPos = this.toolbar.tool === Tool.DRAW ? this.snapToGrid(this.getWorldPos(this.cursorPos)) : this.getWorldPos(this.cursorPos);
-      if (this.toolbar.tool === Tool.DRAW && this.waitingForVertex !== null) {
+    // Add cursor dot and other indicators
+    if (this.toolbar.tool === Tool.DRAW && !this.cursorPos.equals(0, 0)) {
+      const worldPos = this.snapToGrid(this.getWorldPos(this.cursorPos));
+      if (this.firstVertex !== null) {
         this.ctx.strokeStyle = `#${this.color}aa`;
         this.ctx.lineWidth = 2;
         this.ctx.setLineDash([5, 5]);
         this.ctx.beginPath();
-        this.ctx.moveTo(this.waitingForVertex.x, this.waitingForVertex.y);
+        this.ctx.moveTo(this.firstVertex.x, this.firstVertex.y);
         if (element instanceof Vertex) {
           this.ctx.lineTo(element.x, element.y);
           this.ctx.stroke();
@@ -531,7 +532,7 @@ class VertedgeApplication extends ApperApplication {
           this.ctx.stroke();
         }
       }
-      if (element === null || this.toolbar.tool === Tool.DRAW && element instanceof Edge) {
+      if (element == null || element instanceof Edge) {
         this.ctx.fillStyle = `#${this.color}aa`;
         this.ctx.beginPath();
         this.ctx.ellipse(worldPos.x, worldPos.y, 5, 5, 0, 0, 2 * Math.PI);
@@ -612,15 +613,17 @@ class VertedgeApplication extends ApperApplication {
           let placed = new Vertex(p.x, p.y);
           this.vertices.push(placed);
           element = placed;
-          if (this.waitingForVertex !== null) {
-            this.edges.push(new Edge(this.waitingForVertex, placed));
-            this.waitingForVertex = null;
+          if (this.firstVertex !== null && this.firstVertex !== element) {
+            this.edges.push(new Edge(this.firstVertex, placed));
+            this.firstVertex = null;
+          } else {
+            this.firstVertex = element;
           }
         } else if (element instanceof Vertex) {
-          if (this.waitingForVertex !== null) {
-            this.edges.push(new Edge(this.waitingForVertex, element));
+          if (this.firstVertex !== null) {
+            this.edges.push(new Edge(this.firstVertex, element));
           } else {
-            this.waitingForVertex = element;
+            this.firstVertex = element;
           }
         } else if (element instanceof Edge) {
           let placed = new Vertex(p.x, p.y);
@@ -656,9 +659,9 @@ class VertedgeApplication extends ApperApplication {
           element.v2 = placed;
           this.edges.push(other);
           element = placed;
-          if (this.waitingForVertex !== null) {
-            this.edges.push(new Edge(this.waitingForVertex, placed));
-            this.waitingForVertex = null;
+          if (this.firstVertex !== null) {
+            this.edges.push(new Edge(this.firstVertex, placed));
+            this.firstVertex = null;
           }
         }
       } else if (this.toolbar.tool === Tool.ERASE) {
@@ -746,8 +749,8 @@ class VertedgeApplication extends ApperApplication {
       if (element instanceof Vertex) {
         let vertex = this.vertices[index];
         let p = revert ? new ApperPoint(element) : this.snapToGrid(new ApperPoint(element).add(dx, dy));
-        if (this.toolbar.tool === Tool.DRAW && this.waitingForVertex !== null) {
-          if (vertex !== this.waitingForVertex) {
+        if (this.toolbar.tool === Tool.DRAW && this.firstVertex !== null) {
+          if (vertex !== this.firstVertex) {
             if (!revert) console.log("change curvature");
   	      }
         } else {
@@ -781,19 +784,19 @@ class VertedgeApplication extends ApperApplication {
       let element = this.toolbar.tool === Tool.MOVE ? null : this.elementAt(this.cursorPos);
 
       if (this.toolbar.tool === Tool.DRAW) {
-        if (this.waitingForVertex !== null && this.waitingForVertex !== element) {
+        if (this.firstVertex !== null && this.firstVertex !== element) {
           if (element instanceof Vertex) {
-            this.edges.push(new Edge(this.waitingForVertex, element));
+            this.edges.push(new Edge(this.firstVertex, element));
             this.selection = [element];
           } else {
             let worldPos = this.snapToGrid(this.getWorldPos(this.cursorPos));
             let placed = new Vertex(worldPos.x, worldPos.y);
             this.vertices.push(placed);
-            this.edges.push(new Edge(this.waitingForVertex, placed));
+            this.edges.push(new Edge(this.firstVertex, placed));
             this.selection = [placed];
           }
-          this.waitingForVertex = null;
         }
+        this.firstVertex = null;
 
       } else if (this.toolbar.tool === Tool.CAPTURE) {
         this.captureArea = this.captureArea.normalized;
@@ -846,7 +849,7 @@ class VertedgeApplication extends ApperApplication {
       case "keys": this.toolbar.tool = Tool.STYLE; break;
       case "keyg": this.toolbar.tool = Tool.GRID; break;
       case "keyh": this.toolbar.tool = Tool.HELP; break;
-      case "escape": this.waitingForVertex = null; break;
+      case "escape": this.firstVertex = null; break;
       case "backspace":
       case "delete":
         if (!this.selection.length) return false;
@@ -970,8 +973,10 @@ class VertedgeApplication extends ApperApplication {
 
   load(url) {
     this.title = "Loading...";
+
+    let trueURL = url.startsWith("examples") ? this.HOST_URL + url : url;
     
-    fetch(url)
+    fetch(trueURL)
       .then(response => response.json(), error => {
         console.error(error);
         if (error instanceof TypeError) error = "The graph URL could not be reached.";

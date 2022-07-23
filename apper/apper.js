@@ -5,12 +5,24 @@ const populateAppers = (type, className, dest) => {
   }
 }
 
-
 const toggleStyleClass = (element, className) => {
   if (element.classList.contains(className))
     element.classList.remove(className);
   else
     element.classList.add(className);
+}
+
+const measureText = (text, src) => {
+  const canvas = measureText.canvas ?? (measureText.canvas = document.createElement("canvas"));
+  const ctx = canvas.getContext("2d");
+  if (src instanceof Element) {
+    const style = window.getComputedStyle(src, null);
+    ctx.font = `${
+      style.getPropertyValue("font-weight") || "normal"} ${
+      style.getPropertyValue("font-size") || "14px"} ${
+      style.getPropertyValue("font-family") || "Nunito"}`;
+  } else ctx.font = src;
+  return ctx.measureText(text).width;
 }
 
 
@@ -679,9 +691,9 @@ class ApperApplication {
   get element() { return this.#element; }
   get canvas() { return this.#canvas; }
   get title() { return this.#title.value; }
-  set title(text) { return this.#title.value = text; }
+  set title(text) { this.#title.value = text; this.#updateTitleWidth(); return this.#title.value; }
   get defaultTitle() { return this.#defaultTitle; }
-  set defaultTitle(text) { if (!this.title) this.title = text; return this.#defaultTitle = text; }
+  set defaultTitle(text) { if (!this.title) this.title = text; this.#updateTitleWidth(); return this.#defaultTitle = text; }
   get toolbar() { return this.#toolbar; }
   get ctx() { return this.#ctx; }
   get transform() { return this.#transform; }
@@ -705,13 +717,18 @@ class ApperApplication {
     this.#title.value = "";
     this.#title.spellcheck = false;
     this.#title.autocomplete = "off";
+    this.#title.addEventListener("input", event => {
+      this.#updateTitleWidth();
+    }, {capture: false, passive: true});
     this.#title.addEventListener("blur", event => {
       if (!this.title) this.title = this.defaultTitle;
+      this.#updateTitleWidth();
     }, {capture: false, passive: true});
     this.#title.addEventListener("keypress", event => {
       if (event.code.toLowerCase() === "enter") this.#title.blur();
     }, {capture: false, passive: true});
     this.#element.appendChild(this.#title);
+    this.#updateTitleWidth();
 
     this.#message = document.createElement("div");
     this.#message.className = "apper-message";
@@ -737,6 +754,10 @@ class ApperApplication {
     this.#cursorPos = new ApperPoint();
 
     this.#rawWindowResize();
+  }
+
+  #updateTitleWidth() {
+    this.#title.style.width = `${measureText(this.title, this.#title) + 12}px`;  // For some reason, setting this.#title.style.width doesn't work
   }
 
   enableToolbar() {

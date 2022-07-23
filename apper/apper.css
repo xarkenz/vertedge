@@ -3,7 +3,7 @@
   to { opacity: 1; }
 }
 
-@keyframes apper-enter-from-top {
+@keyframes apper-enter-from-top { /* TODO: find a way to avoid the -50% */
   from { transform: translate(-50%, -48px); }
   to { transform: translate(-50%, 0); }
 }
@@ -48,7 +48,7 @@
 
 .apper-title {
   position: absolute;
-  width: calc(100% - 256px); /* TODO: why are text inputs so annoying to work with */
+  width: auto;
   height: min-content;
   left: 50%;
   top: 16px;
