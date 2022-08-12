@@ -1,258 +1,50 @@
-const vertedgeApps = [];
-
-window.addEventListener("load", event => {
-  populateAppers(VertedgeApplication, "vertedge-application", vertedgeApps);
-});
-
-
-const Tool = {
-  SELECT: 0,
-  MOVE: 1,
-  DRAW: 2,
-  ERASE: 3,
-  STYLE: 4,
-  GRID: 5,
-  CAPTURE: 6,
-  DATA: 7,
-  LOAD: 8,
-  HELP: 9,
-}
-
-const Direction = {
-  N: 0, E: 1, S: 2, W: 3,
-  NW: 4, NE: 5, SE: 6, SW: 7,
-  C: 8,
-}
-
-const Shape = {
-  CIRCLE: 0, SQUARE: 1, DIAMOND: 2,
-}
-
-
-class Vertex {
-
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.r = 10;
-    this.fill = "#666";
-    this.stroke = "#ccc";
-    this.lineWidth = 4;
-    this.lineDash = [];
-    this.shape = Shape.CIRCLE;
-  }
-
-  path(ctx) {
-    ctx.beginPath();
-    switch (this.shape) {
-      case Shape.CIRCLE:
-      default:
-        ctx.ellipse(this.x, this.y, this.r, this.r, 0, 0, 2 * Math.PI);
-        break;
-      case Shape.SQUARE:
-        ctx.rect(this.x - this.r, this.y - this.r, 2 * this.r, 2 * this.r);
-        break;
-      case Shape.DIAMOND:
-        ctx.moveTo(this.x, this.y - 1.3 * this.r);
-        ctx.lineTo(this.x - 1.3 * this.r, this.y);
-        ctx.lineTo(this.x, this.y + 1.3 * this.r);
-        ctx.lineTo(this.x + 1.3 * this.r, this.y);
-        ctx.closePath();
-        break;
-    }
-  }
-
-  draw(ctx, hover, select, highlight) {
-    // Add highlight if hovered or selected
-    if (hover || select) {
-      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
-      ctx.lineWidth = this.lineWidth + 4;
-      ctx.setLineDash([]);
-      this.path(ctx);
-      ctx.stroke();
-    }
-    // Draw the actual vertex
-    ctx.fillStyle = this.fill;
-    ctx.strokeStyle = this.stroke;
-    ctx.lineWidth = this.lineWidth;
-    ctx.setLineDash(this.lineDash);
-    this.path(ctx);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  contains(ctx, pos, select) {
-    // Recreate shape of vertex
-    ctx.lineWidth = select ? this.lineWidth + 4 : Math.max(this.lineWidth + 4, 12);
-    this.path(ctx);
-    // Check collision
-    return ctx.isPointInPath(pos.x, pos.y) || ctx.isPointInStroke(pos.x, pos.y);
-  }
-
-  copy() {
-    let copy = new Vertex(this.x, this.y);
-    copy.r = this.r;
-    copy.fill = this.fill;
-    copy.stroke = this.stroke;
-    copy.lineWidth = this.lineWidth;
-    copy.lineDash = this.lineDash.slice();
-    copy.shape = this.shape;
-    return copy;
-  }
-
-  get margin() {
-    return (this.shape === Shape.DIAMOND ? 1.3 : 1) * this.r + 0.5 * this.lineWidth;
-  }
-  
-}
-
-
-class Edge {
-
-  constructor(v1, v2) {
-    this.v1 = v1;
-    this.v2 = v2;
-    this.cp = null;
-    this.stroke = "#666";
-    this.lineWidth = 4;
-    this.lineDash = [];
-  }
-
-  path(ctx) {
-    ctx.beginPath();
-    ctx.moveTo(this.v1.x, this.v1.y);
-    if (this.cp === null) ctx.lineTo(this.v2.x, this.v2.y);
-    else ctx.quadraticCurveTo(this.cp.x, this.cp.y, this.v2.x, this.v2.y);
-  }
-
-  draw(ctx, hover, select, highlight) {
-    // Add highlight if hovered or selected
-    if (hover || select) {
-      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
-      ctx.lineWidth = this.lineWidth + 4;
-      ctx.setLineDash([]);
-      this.path(ctx);
-      ctx.stroke();
-    }
-    // Draw the edge itself
-    ctx.strokeStyle = this.stroke;
-    ctx.lineWidth = this.lineWidth;
-    ctx.setLineDash(this.lineDash);
-    this.path(ctx);
-    ctx.stroke();
-    // Add the control point visual on top if selected
-    if (select && this.cp !== null) {
-      // Draw lines to control point
-      ctx.strokeStyle = `#${highlight}77`;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([2, 5]);
-      ctx.beginPath();
-      ctx.moveTo(this.v1.x, this.v1.y);
-      ctx.lineTo(this.cp.x, this.cp.y);
-      ctx.moveTo(this.v2.x, this.v2.y);
-      ctx.lineTo(this.cp.x, this.cp.y);
-      ctx.stroke();
-      // Draw diamond at control point
-      ctx.fillStyle = `#${highlight}cc`;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(this.cp.x, this.cp.y + 8);
-      ctx.lineTo(this.cp.x + 8, this.cp.y);
-      ctx.lineTo(this.cp.x, this.cp.y - 8);
-      ctx.lineTo(this.cp.x - 8, this.cp.y);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  contains(ctx, pos, select) {
-    // Check control point first
-    if (this.cp !== null) {
-      ctx.beginPath();
-      ctx.ellipse(this.cp.x, this.cp.y, 10, 10, 0, 0, 2 * Math.PI);
-      if (ctx.isPointInPath(pos.x, pos.y)) return true;
-    }
-    // Recreate shape of edge
-    ctx.lineWidth = select ? this.lineWidth + 4 : Math.max(this.lineWidth + 4, 12);
-    ctx.beginPath();
-    ctx.moveTo(this.v1.x, this.v1.y);
-    if (this.cp === null) ctx.lineTo(this.v2.x, this.v2.y);
-    else ctx.quadraticCurveTo(this.cp.x, this.cp.y, this.v2.x, this.v2.y);
-    // Check collision
-    return ctx.isPointInStroke(pos.x, pos.y);
-  }
-
-  copy() {
-    let copy = new Edge(this.v1.copy(), this.v2.copy());
-    copy.cp = this.cp === null ? null : this.cp.copy();
-    copy.stroke = this.stroke;
-    copy.lineWidth = this.lineWidth;
-    copy.lineDash = this.lineDash.slice();
-    return copy;
-  }
-
-  get margin() {
-    return 0.5 * this.lineWidth;
-  }
-
-}
-
-
-// Position at t (quadratic beziér): t²r + 2t(1-t)q + (1-t)²p
-const curveQ = (t, p, q, r) => r.mul(t*t).add(q.mul(2*t*(1-t))).add(p.mul((1-t)*(1-t)));
-// Velocity at t (quadratic beziér): 2tr + (2(1-t)-2t)q - 2(1-t)p
-const curveQDelta = (t, p, q, r) => r.mul(2*t).add(q.mul(2*(1-t)-2*t)).sub(p.mul(2*(1-t)));
-const curveQVertX = (p, q, r) => p.x - 2*q.x + r.x === 0 ? null : (-q.x*q.x + 2*q.x*r.x - r.x*r.x) / (p.x - 2*q.x + r.x) + r.x;
-const curveQVertY = (p, q, r) => p.y - 2*q.y + r.y === 0 ? null : (-q.y*q.y + 2*q.y*r.y - r.y*r.y) / (p.y - 2*q.y + r.y) + r.y;
-
-const ptOrient = (p1, p2, p3) => Math.sign((p2.y-p1.y)*(p3.x-p2.x) - (p2.x-p1.x)*(p3.y-p2.y));
-const linesIntersect = (p1, q1, p2, q2) => ptOrient(p1, q1, p2) != ptOrient(p1, q1, q2) && ptOrient(p2, q2, p1) != ptOrient(p2, q2, q1);
-
-
-class VertedgeApplication extends ApperApplication {
+class Vertedge extends Apper {
 
   get dragging() { return this.drag !== null; }
-  get grid() { return {x: this.gridWidthInput.value, y: this.gridHeightInput.value}; }
+  get grid() { return {x: this.widget.gridWidth.value, y: this.widget.gridHeight.value}; }
 
-  constructor(element) {
-    super(element);
+  constructor() {
+    super();
 
     this.HOST_URL = "https://raw.githubusercontent.com/xarkenz/vertedge/main/"
-    this.BEZIER_SAMPLE_INTERVAL = 0.01;
+    this.CURVE_SAMPLE_INTERVAL = 0.01;
     this.REVERT_PROXIMITY = 8;
     this.RESIZE_PROXIMITY = 12;
+    this.REVERT_ANGLE_DIFF = 0.3;
 
     this.enableToolbar()
-      .addTool("select", "Select", "icons/select.svg", "keyv", "v", true)
-      .addTool("move", "Move", "icons/move.svg", "keym", "m")
-      .addTool("draw", "Draw", "icons/draw.svg", "keyd", "d")
-      .addTool("erase", "Erase", "icons/erase.svg", "keyx", "x")
-      .addTool("style", "Style", "icons/style.svg", "keys", "s")
-      .addTool("grid", "Grid", "icons/grid.svg", "keyg", "g")
+      .addTool(Vertedge.Tool.SELECT, true)
+      .addTool(Vertedge.Tool.MOVE)
+      .addTool(Vertedge.Tool.DRAW)
+      .addTool(Vertedge.Tool.ERASE)
+      .addTool(Vertedge.Tool.STYLE)
+      .addTool(Vertedge.Tool.GRID)
       .addSpacer()
-      .addTool("capture", "Capture", "icons/capture.svg")
-      .addTool("data", "View Data", "icons/data.svg")
-      .addTool("load", "Load", "icons/load.svg")
-      .addTool("help", "Help", "icons/help.svg", "keyh", "h");
+      .addTool(Vertedge.Tool.CAPTURE)
+      .addTool(Vertedge.Tool.DATA)
+      .addTool(Vertedge.Tool.LOAD)
+      .addTool(Vertedge.Tool.HELP);
+
+    this.widget = {};
 
     let icons = ["icons/shape-circle.svg", "icons/shape-square.svg", "icons/shape-diamond.svg"];
-    this.addMenu(0, "Element Style")
+    this.styleMenu = this.addMenu("Element Style")
       .addSeparator()
-      .add(this.shapeInput = new ApperHSpread("vertedge-vertex-shape", "Shape:", icons)
+      .add(this.widget.vertexShape = new Apper.Menu.HSpread("vertedge-vertex-shape", "Shape:", icons)
         .onChange(value => {
           this.selection.forEach(element => {
-            if (element instanceof Vertex) element.shape = value;
+            if (element instanceof Vertedge.Vertex) element.shape = value;
           });
           this.update();
         }))
-      .add(this.radiusInput = new ApperNumberInput("vertedge-radius", "Radius:", "icons/radius.svg")
+      .add(this.widget.vertexRadius = new Apper.Menu.NumberInput("vertedge-vertex-radius", "Radius:", "icons/radius.svg")
         .onChange(value => {
           this.selection.forEach(element => {
-            if (element instanceof Vertex) element.r = value;
+            if (element instanceof Vertedge.Vertex) element.r = value;
           });
           this.update();
         }))
-      .add(this.lineWidthInput = new ApperNumberInput("vertedge-line-width", "Line width:", "icons/line-width.svg")
+      .add(this.widget.lineWidth = new Apper.Menu.NumberInput("vertedge-line-width", "Line width:", "icons/line-width.svg")
         .onChange(value => {
           this.selection.forEach(element => {
             element.lineWidth = value;
@@ -260,36 +52,35 @@ class VertedgeApplication extends ApperApplication {
           this.update();
         }));
 
-    this.addMenu(1, "Grid Settings")
+    this.gridMenu = this.addMenu("Grid Settings")
       .addSeparator()
-      .add(this.enableGrid = new ApperCheckbox("vertedge-enable-grid", "Enable grid")
+      .add(this.widget.enableGrid = new Apper.Menu.Checkbox("vertedge-enable-grid", "Enable grid")
         .onChange(value => this.update()))
-      .add(this.gridWidthInput = new ApperNumberInput("vertedge-grid-width", "Horizontal spacing:", "icons/width.svg", 50)
+      .add(this.widget.gridWidth = new Apper.Menu.NumberInput("vertedge-grid-width", "Horizontal spacing:", "icons/width.svg", 50)
         .onChange(value => this.update()))
-      .add(this.gridHeightInput = new ApperNumberInput("vertedge-grid-height", "Vertical spacing:", "icons/height.svg", 50)
+      .add(this.widget.gridHeight = new Apper.Menu.NumberInput("vertedge-grid-height", "Vertical spacing:", "icons/height.svg", 50)
         .onChange(value => this.update()));
 
-    this.captureMenu = {ID: 2};
-    this.addMenu(this.captureMenu.ID, "Capture Image")
+    this.captureMenu = this.addMenu("Capture Image")
       .addSeparator()
-      .add(this.captureMenu.prompt = new ApperParagraph("To capture a graph image, try adding some components to the graph."))
-      .add(this.captureMenu.instructions = new ApperParagraph("Resize the box to crop the resulting image. To move the view, drag from outside the box.").hide())
+      .add(this.widget.capturePrompt = new Apper.Menu.Paragraph("To capture a graph image, try adding some components to the graph."))
+      .add(this.widget.captureInstructions = new Apper.Menu.Paragraph("Resize the box to crop the resulting image. To move the view, drag from outside the box.").hide())
       .addSeparator()
-      .add(this.captureMenu.emptyPreview = new ApperParagraph("An image preview will appear here."))
-      .add(this.captureMenu.preview = new ApperCanvasImage("Preview:").hide())
-      .add(this.captureMenu.download = new ApperButton("Download as PNG").hide());
+      .add(this.widget.captureEmptyPreview = new Apper.Menu.Paragraph("An image preview will appear here."))
+      .add(this.widget.capturePreview = new Apper.Menu.CanvasImage("Preview:").hide())
+      .add(this.widget.captureDownload = new Apper.Menu.Button("Download as PNG").hide());
 
-    this.addMenu(3, "Raw Graph Data")
+    this.dataMenu = this.addMenu("Raw Graph Data")
       .addSeparator()
-      .add(this.dataEditor = new ApperTextEditor("vertedge-data-editor", "Raw JSON data...")
+      .add(this.widget.dataEditor = new Apper.Menu.TextEditor("vertedge-data-editor", "Raw JSON data...")
         .onChange(text => {
           if (!text) this.loadFromData({});
           else try {
             this.loadFromData(JSON.parse(text));
-            this.dataEditor.valid = true;
+            this.widget.dataEditor.valid = true;
           } catch (err) {
             if (!(err instanceof SyntaxError)) console.error(err);
-            this.dataEditor.valid = false;
+            this.widget.dataEditor.valid = false;
           }
           this.update();
         }));
@@ -305,23 +96,22 @@ class VertedgeApplication extends ApperApplication {
       "Complete Bipartite Graph: m = 3, n = 3"
     ];
 
-    this.addMenu(4, "Load a Graph")
+    this.loadMenu = this.addMenu("Load a Graph")
       .addSeparator()
-      .add(new ApperButtonList("Example Graphs:", this.exampleURLs, this.exampleTitles)
+      .add(new Apper.Menu.ButtonList("Example Graphs:", this.exampleURLs, this.exampleTitles)
         .onChange(url => {
-          this.toolbar.tool = Tool.SELECT;
           this.update();
           this.load(url);
+          this.tool = this.toolbar.defaultTool;
         }));
 
-    this.addMenu(5, "Need help?")
+    this.helpMenu = this.addMenu("Need help?")
       .addSeparator()
-      .add(new ApperParagraph("Sorry, nothing here yet. Coming soon!"));
+      .add(new Apper.Menu.Paragraph("Sorry, nothing here yet. Coming soon!"));
 
     this.defaultTitle = "Untitled Graph";
 
     this.selection = [];
-
     this.drag = null;
     this.firstVertex = null;
     this.color = "";
@@ -336,46 +126,46 @@ class VertedgeApplication extends ApperApplication {
   }
 
   render() {
-    if (this.toolbar === null) return;
+    if (!this.toolbar) return;
 
-    const element = this.toolbar.tool === Tool.MOVE || this.toolbar.tool === Tool.CAPTURE ? null : this.elementAt(this.cursorPos);
-    this.color = this.toolbar.tool === Tool.DRAW ? "23a54c"  // green
-               : this.toolbar.tool === Tool.ERASE ? "e84b33"  // red
-               : "b762f0";  // purple
-    const captureResizeDirection = this.captureResizeDirection;
+    const element = this.tool === Vertedge.Tool.MOVE || this.tool === Vertedge.Tool.CAPTURE ? null : this.elementAt(this.cursorPos);
+    this.color = this.tool === Vertedge.Tool.DRAW ? Vertedge.Color.GREEN
+               : this.tool === Vertedge.Tool.ERASE ? Vertedge.Color.RED
+               : Vertedge.Color.PURPLE;
+    const captureResizeDirection = this.captureResizeDirection();
 
-    if (this.toolbar.tool !== Tool.DRAW) this.firstVertex = null;
-    if (this.toolbar.tool !== Tool.CAPTURE) this.captureArea = null;
+    if (this.tool !== Vertedge.Tool.DRAW) this.firstVertex = null;
+    if (this.tool !== Vertedge.Tool.CAPTURE) this.captureArea = null;
 
-    if (this.toolbar.tool === Tool.STYLE && this.selection.length > 0) {
-      if (this.selection.some(element => element instanceof Vertex)) {
-        this.shapeInput.element.style.display = "";
-        this.radiusInput.element.style.display = "";
+    if (this.tool === Vertedge.Tool.STYLE && this.selection.length) {
+      if (this.selection.some(element => element instanceof Vertedge.Vertex)) {
+        this.widget.vertexShape.element.style.display = "";
+        this.widget.vertexRadius.element.style.display = "";
         
         let shape = null;
         for (let element of this.selection) {
-          if (element instanceof Vertex)
+          if (element instanceof Vertedge.Vertex)
             if (shape === null) shape = element.shape;
             else if (element.shape !== shape) {
               shape = null;
               break;
             }
         }
-        this.shapeInput.value = shape;
+        this.widget.vertexShape.value = shape;
   
         let radius = null;
         for (let element of this.selection) {
-          if (element instanceof Vertex)
+          if (element instanceof Vertedge.Vertex)
             if (radius === null) radius = element.r;
             else if (element.r !== radius) {
               radius = null;
               break;
             }
         }
-        this.radiusInput.value = radius === null ? 10 : radius;
+        this.widget.vertexRadius.value = radius ?? 10;
       } else {
-        this.shapeInput.element.style.display = "none";
-        this.radiusInput.element.style.display = "none";
+        this.widget.vertexShape.element.style.display = "none";
+        this.widget.vertexRadius.element.style.display = "none";
       }
 
       let lineWidth = null;
@@ -386,78 +176,79 @@ class VertedgeApplication extends ApperApplication {
           break;
         }
       }
-      this.lineWidthInput.value = lineWidth ?? 4;
+      this.widget.lineWidth.value = lineWidth ?? 4;
       
-      this.menu(0).show();
-    } else this.menu(0).hide();
+      this.styleMenu.show();
+    } else this.styleMenu.hide();
 
-    if (this.toolbar.tool === Tool.GRID) this.menu(1).show();
-    else this.menu(1).hide();
+    if (this.tool === Vertedge.Tool.GRID) this.gridMenu.show();
+    else this.gridMenu.hide();
 
-    if (this.toolbar.tool === Tool.CAPTURE) {
-      if (this.captureArea === null) this.fitCaptureTo(this.vertices, this.edges);
+    if (this.tool === Vertedge.Tool.CAPTURE) {
+      if (this.captureArea === null) this.fitCaptureTo(this.selection.length ? this.selection : this.vertices.concat(this.edges));
       if (this.captureArea === null) {
-        this.captureMenu.instructions.hide();
-        this.captureMenu.preview.hide();
-        this.captureMenu.download.hide();
-        this.captureMenu.prompt.show();
-        this.captureMenu.emptyPreview.show();
+        this.widget.captureInstructions.hide();
+        this.widget.capturePreview.hide();
+        this.widget.captureDownload.hide();
+        this.widget.capturePrompt.show();
+        this.widget.captureEmptyPreview.show();
 
-        this.captureMenu.download.url = "";
-        this.captureMenu.download.filename = "";
+        this.widget.captureDownload.url = "";
+        this.widget.captureDownload.filename = "";
       } else {
-        this.captureMenu.prompt.hide();
-        this.captureMenu.emptyPreview.hide();
-        this.captureMenu.instructions.show();
-        this.captureMenu.preview.show();
-        this.captureMenu.download.show();
+        this.widget.capturePrompt.hide();
+        this.widget.captureEmptyPreview.hide();
+        this.widget.captureInstructions.show();
+        this.widget.capturePreview.show();
+        this.widget.captureDownload.show();
 
-        this.captureMenu.preview.label = `Preview (${this.captureArea.w} \u00d7 ${this.captureArea.h}):`
-        this.captureMenu.preview.resize(this.captureArea.w, this.captureArea.h);
-        this.captureMenu.preview.ctx.resetTransform();
-        this.captureMenu.preview.ctx.clearRect(0, 0, this.captureMenu.preview.canvas.width, this.captureMenu.preview.canvas.height);
-        this.captureMenu.preview.ctx.translate(-this.captureArea.x, -this.captureArea.y);
+        this.widget.capturePreview.label = `Preview (${this.captureArea.w} \u00d7 ${this.captureArea.h}):`
+        this.widget.capturePreview.resize(this.captureArea.w, this.captureArea.h);
+        this.widget.capturePreview.ctx.resetTransform();
+        this.widget.capturePreview.ctx.clearRect(0, 0, this.widget.capturePreview.canvas.width, this.widget.capturePreview.canvas.height);
+        this.widget.capturePreview.ctx.translate(-this.captureArea.x, -this.captureArea.y);
 
         this.edges.forEach(edge => {
-          edge.draw(this.captureMenu.preview.ctx, false, false, this.color);
+          edge.draw(this.widget.capturePreview.ctx, false, false, this.color);
         });
         this.vertices.forEach(vertex => {
-          vertex.draw(this.captureMenu.preview.ctx, false, false, this.color);
+          vertex.draw(this.widget.capturePreview.ctx, false, false, this.color);
         });
 
-        this.captureMenu.download.url = this.captureMenu.preview.canvas.toDataURL("image/png");
-        this.captureMenu.download.filename = `${this.title}.png`;
+        this.widget.captureDownload.url = this.widget.capturePreview.canvas.toDataURL("image/png");
+        this.widget.captureDownload.filename = `${this.title}.png`;
       }
 
-      this.menu(this.captureMenu.ID).show();
-    } else this.menu(this.captureMenu.ID).hide();
+      this.captureMenu.show();
+    } else this.captureMenu.hide();
 
-    if (this.toolbar.tool === Tool.DATA) {
-      if (!this.dataEditor.editing) this.dataEditor.text = this.graphData;
+    if (this.tool === Vertedge.Tool.DATA) {
+      if (!this.widget.dataEditor.editing) this.widget.dataEditor.text = this.graphData;
       
-      this.menu(3).show();
-    } else this.menu(3).hide();
+      this.dataMenu.show();
+    } else this.dataMenu.hide();
 
-    if (this.toolbar.tool === Tool.LOAD) this.menu(4).show();
-    else this.menu(4).hide();
+    if (this.tool === Vertedge.Tool.LOAD) this.loadMenu.show();
+    else this.loadMenu.hide();
 
-    if (this.toolbar.tool === Tool.HELP) this.menu(5).show();
-    else this.menu(5).hide();
+    if (this.tool === Vertedge.Tool.HELP) this.helpMenu.show();
+    else this.helpMenu.hide();
 
-    if (this.toolbar.tool === Tool.MOVE) {
+    // Set cursor appearance
+    if (this.tool === Vertedge.Tool.MOVE) {
       this.element.style.cursor = this.dragging ? "grabbing" : "";
       this.canvas.style.cursor = this.dragging ? "" : "grab";
-    } else if (this.toolbar.tool === Tool.CAPTURE) {
+    } else if (this.tool === Vertedge.Tool.CAPTURE) {
       let cursor = "";
       switch (this.drag?.captureResizeDirection ?? captureResizeDirection) {
-        case Direction.N: cursor = "n-resize"; break;
-        case Direction.E: cursor = "e-resize"; break;
-        case Direction.S: cursor = "s-resize"; break;
-        case Direction.W: cursor = "w-resize"; break;
-        case Direction.NW: cursor = "nw-resize"; break;
-        case Direction.NE: cursor = "ne-resize"; break;
-        case Direction.SE: cursor = "se-resize"; break;
-        case Direction.SW: cursor = "sw-resize"; break;
+        case Vertedge.Direction.N: cursor = "n-resize"; break;
+        case Vertedge.Direction.E: cursor = "e-resize"; break;
+        case Vertedge.Direction.S: cursor = "s-resize"; break;
+        case Vertedge.Direction.W: cursor = "w-resize"; break;
+        case Vertedge.Direction.NW: cursor = "nw-resize"; break;
+        case Vertedge.Direction.NE: cursor = "ne-resize"; break;
+        case Vertedge.Direction.SE: cursor = "se-resize"; break;
+        case Vertedge.Direction.SW: cursor = "sw-resize"; break;
         default: cursor = this.dragging ? "grabbing" : "grab"; break;
       }
       this.element.style.cursor = this.dragging ? cursor : "";
@@ -470,10 +261,11 @@ class VertedgeApplication extends ApperApplication {
     this.ctx.lineCap = "round";
     this.ctx.lineJoin = "round";
 
-    if (this.enableGrid.checked) {
+    // Grid
+    if (this.widget.enableGrid.checked) {
       let grid = this.grid;
-      let topLeft = this.getWorldPos(new ApperPoint());
-      let bottomRight = this.getWorldPos(new ApperPoint(this.canvas.width, this.canvas.height));
+      let topLeft = this.getWorldPos(new Apper.Vector2());
+      let bottomRight = this.getWorldPos(new Apper.Vector2(this.canvas.width, this.canvas.height));
       
       this.ctx.strokeStyle = "#fff1";
       this.ctx.lineWidth = 2;
@@ -493,10 +285,11 @@ class VertedgeApplication extends ApperApplication {
       this.ctx.stroke();
     }
 
-    if (this.dragging && this.drag.elements.length > 0) {
+    // Original element position indicators
+    if (this.dragging && this.drag.elements.length) {
       for (let element of this.drag.elements) {
         element.draw(this.ctx, false, false, this.color);
-        if (element instanceof Edge && element.cp !== null) {
+        if (element instanceof Vertedge.Edge && element.cp !== null) {
           this.ctx.strokeStyle = `#${this.color}77`;
           this.ctx.lineWidth = 2;
           this.ctx.setLineDash([]);
@@ -507,7 +300,7 @@ class VertedgeApplication extends ApperApplication {
       }
     }
 
-    // Draw edges, then vertices (later index -> higher z)
+    // Edges, then vertices (last index appears on top, vertices always in front of edges)
     this.edges.forEach(edge => {
       edge.draw(this.ctx, !this.dragging && element === edge, this.selection.includes(edge), this.color);
     });
@@ -515,8 +308,8 @@ class VertedgeApplication extends ApperApplication {
       vertex.draw(this.ctx, !this.dragging && element === vertex, this.selection.includes(vertex), this.color);
     });
 
-    // Add cursor dot and other indicators
-    if (this.toolbar.tool === Tool.DRAW && !this.cursorPos.equals(0, 0)) {
+    // Cursor dot and/or edge preview
+    if (this.tool === Vertedge.Tool.DRAW && !this.cursorPos.equals(0, 0)) {
       const worldPos = this.snapToGrid(this.getWorldPos(this.cursorPos));
       if (this.firstVertex !== null) {
         this.ctx.strokeStyle = `#${this.color}aa`;
@@ -524,7 +317,7 @@ class VertedgeApplication extends ApperApplication {
         this.ctx.setLineDash([5, 5]);
         this.ctx.beginPath();
         this.ctx.moveTo(this.firstVertex.x, this.firstVertex.y);
-        if (element instanceof Vertex) {
+        if (element instanceof Vertedge.Vertex) {
           this.ctx.lineTo(element.x, element.y);
           this.ctx.stroke();
         } else {
@@ -532,7 +325,7 @@ class VertedgeApplication extends ApperApplication {
           this.ctx.stroke();
         }
       }
-      if (element == null || element instanceof Edge) {
+      if (element == null || element instanceof Vertedge.Edge) {
         this.ctx.fillStyle = `#${this.color}aa`;
         this.ctx.beginPath();
         this.ctx.ellipse(worldPos.x, worldPos.y, 5, 5, 0, 0, 2 * Math.PI);
@@ -540,15 +333,15 @@ class VertedgeApplication extends ApperApplication {
       }
     }
 
-    // Draw selection box
-    if (this.toolbar.tool !== Tool.MOVE && this.toolbar.tool !== Tool.DRAW && this.toolbar.tool !== Tool.CAPTURE && this.dragging && !this.drag.elements.length && !this.cursorPos.equals(0, 0)) {
-      let start = this.getWorldPos(new ApperPoint(this.drag.x, this.drag.y));
+    // Selection box
+    if (this.tool !== Vertedge.Tool.MOVE && this.tool !== Vertedge.Tool.DRAW && this.tool !== Vertedge.Tool.CAPTURE && this.dragging && !this.drag.elements.length && !this.cursorPos.equals(0, 0)) {
+      let start = this.getWorldPos(new Apper.Vector2(this.drag.x, this.drag.y));
       let end = this.getWorldPos(this.cursorPos);
       this.ctx.strokeStyle = `#${this.color}77`;
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([5, 5]);
+      // Below differs from ctx.rect() because it locks the line dash at the start and end corners, which looks nicer
       this.ctx.beginPath();
-      // This differs from ctx.rect() because it locks the line dash at the start and end points
       this.ctx.moveTo(start.x, start.y);
       this.ctx.lineTo(end.x, start.y);
       this.ctx.moveTo(start.x, start.y);
@@ -560,42 +353,44 @@ class VertedgeApplication extends ApperApplication {
       this.ctx.stroke();
     }
 
-    // Draw capture box
-    if (this.toolbar.tool === Tool.CAPTURE && this.captureArea !== null) {
-      this.ctx.fillStyle = "#ff942133";
-      this.ctx.strokeStyle = "#ff9421aa";
+    // Capture box
+    if (this.tool === Vertedge.Tool.CAPTURE && this.captureArea !== null) {
+      this.ctx.fillStyle = `#${Vertedge.Color.ORANGE}33`;
+      this.ctx.strokeStyle = `#${Vertedge.Color.ORANGE}aa`;
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([]);
       this.ctx.beginPath();
       this.ctx.rect(this.captureArea.x, this.captureArea.y, this.captureArea.w, this.captureArea.h);
       this.ctx.fill();
+      // Resize handles
       this.ctx.rect(this.captureArea.x - 6, this.captureArea.y - 6, 12, 12);
-      this.ctx.rect(this.captureArea.X - 6, this.captureArea.y - 6, 12, 12);
-      this.ctx.rect(this.captureArea.X - 6, this.captureArea.Y - 6, 12, 12);
-      this.ctx.rect(this.captureArea.x - 6, this.captureArea.Y - 6, 12, 12);
-      let midX = Math.round(0.5 * (this.captureArea.x + this.captureArea.X));
-      let midY = Math.round(0.5 * (this.captureArea.y + this.captureArea.Y));
+      this.ctx.rect(this.captureArea.xw - 6, this.captureArea.y - 6, 12, 12);
+      this.ctx.rect(this.captureArea.xw - 6, this.captureArea.yh - 6, 12, 12);
+      this.ctx.rect(this.captureArea.x - 6, this.captureArea.yh - 6, 12, 12);
+      let midX = Math.round(0.5 * (this.captureArea.x + this.captureArea.xw));
+      let midY = Math.round(0.5 * (this.captureArea.y + this.captureArea.yh));
       if (this.captureArea.w > 2 * this.RESIZE_PROXIMITY) {
         this.ctx.rect(midX - 6, this.captureArea.y - 6, 12, 12);
-        this.ctx.rect(midX - 6, this.captureArea.Y - 6, 12, 12);
+        this.ctx.rect(midX - 6, this.captureArea.yh - 6, 12, 12);
       }
       if (this.captureArea.h > 2 * this.RESIZE_PROXIMITY) {
-        this.ctx.rect(this.captureArea.X - 6, midY - 6, 12, 12);
+        this.ctx.rect(this.captureArea.xw - 6, midY - 6, 12, 12);
         this.ctx.rect(this.captureArea.x - 6, midY - 6, 12, 12);
       }
       this.ctx.stroke();
+      // Indicator for hovering over a resize portion
       if (this.drag?.captureResizeDirection ?? captureResizeDirection != null) {
-        this.ctx.fillStyle = this.drag?.captureResizeDirection != null ? "#ff9421aa" : "#ff942177";
+        this.ctx.fillStyle = this.drag?.captureResizeDirection != null ? `#${Vertedge.Color.ORANGE}aa` : `#${Vertedge.Color.ORANGE}77`;
         this.ctx.beginPath();
         switch (this.drag?.captureResizeDirection ?? captureResizeDirection) {
-          case Direction.N: this.ctx.rect(midX - 6, this.captureArea.y - 6, 12, 12); break;
-          case Direction.E: this.ctx.rect(this.captureArea.X - 6, midY - 6, 12, 12); break;
-          case Direction.S: this.ctx.rect(midX - 6, this.captureArea.Y - 6, 12, 12); break;
-          case Direction.W: this.ctx.rect(this.captureArea.x - 6, midY - 6, 12, 12); break;
-          case Direction.NW: this.ctx.rect(this.captureArea.x - 6, this.captureArea.y - 6, 12, 12); break;
-          case Direction.NE: this.ctx.rect(this.captureArea.X - 6, this.captureArea.y - 6, 12, 12); break;
-          case Direction.SE: this.ctx.rect(this.captureArea.X - 6, this.captureArea.Y - 6, 12, 12); break;
-          case Direction.SW: this.ctx.rect(this.captureArea.x - 6, this.captureArea.Y - 6, 12, 12); break;
+          case Vertedge.Direction.N: this.ctx.rect(midX - 6, this.captureArea.y - 6, 12, 12); break;
+          case Vertedge.Direction.E: this.ctx.rect(this.captureArea.xw - 6, midY - 6, 12, 12); break;
+          case Vertedge.Direction.S: this.ctx.rect(midX - 6, this.captureArea.yh - 6, 12, 12); break;
+          case Vertedge.Direction.W: this.ctx.rect(this.captureArea.x - 6, midY - 6, 12, 12); break;
+          case Vertedge.Direction.NW: this.ctx.rect(this.captureArea.x - 6, this.captureArea.y - 6, 12, 12); break;
+          case Vertedge.Direction.NE: this.ctx.rect(this.captureArea.xw - 6, this.captureArea.y - 6, 12, 12); break;
+          case Vertedge.Direction.SE: this.ctx.rect(this.captureArea.xw - 6, this.captureArea.yh - 6, 12, 12); break;
+          case Vertedge.Direction.SW: this.ctx.rect(this.captureArea.x - 6, this.captureArea.yh - 6, 12, 12); break;
           default: break;
         }
         this.ctx.fill();
@@ -604,45 +399,46 @@ class VertedgeApplication extends ApperApplication {
   }
 
   mouseDown(event) {
-    if (event.leftBtn) {
+    if (event.button === 0) {
+      const canSelect = this.tool !== Vertedge.Tool.MOVE && this.tool !== Vertedge.Tool.CAPTURE;
       let p = this.snapToGrid(event.worldPos);
-      let element = this.toolbar.tool === Tool.MOVE || this.toolbar.tool === Tool.CAPTURE ? null : this.elementAt(event.screenPos);
+      let element = canSelect ? this.elementAt(event.screenPos) : null;
       
-      if (this.toolbar.tool === Tool.DRAW) {
+      if (this.tool === Vertedge.Tool.DRAW) {
         if (element === null) {
-          let placed = new Vertex(p.x, p.y);
+          let placed = new Vertedge.Vertex(p.x, p.y);
           this.vertices.push(placed);
           element = placed;
           if (this.firstVertex !== null && this.firstVertex !== element) {
-            this.edges.push(new Edge(this.firstVertex, placed));
+            this.edges.push(new Vertedge.Edge(this.firstVertex, placed));
             this.firstVertex = null;
           } else {
             this.firstVertex = element;
           }
-        } else if (element instanceof Vertex) {
+        } else if (element instanceof Vertedge.Vertex) {
           if (this.firstVertex !== null) {
-            this.edges.push(new Edge(this.firstVertex, element));
+            this.edges.push(new Vertedge.Edge(this.firstVertex, element));
           } else {
             this.firstVertex = element;
           }
-        } else if (element instanceof Edge) {
-          let placed = new Vertex(p.x, p.y);
+        } else if (element instanceof Vertedge.Edge) {
+          let placed = new Vertedge.Vertex(p.x, p.y);
           this.vertices.push(placed);
-          let other = new Edge(placed, element.v2);
+          let other = new Vertedge.Edge(placed, element.v2);
           if (element.cp !== null) {
-            let p0 = new ApperPoint(element.v1);
-            let p1 = new ApperPoint(element.v2);
+            let p0 = new Apper.Vector2(element.v1);
+            let p1 = new Apper.Vector2(element.v2);
             let cp = element.cp.copy();
             let tc = 0;
             let closest = Infinity;
             let lastTest = Infinity;
-            for (let t = 0; t <= 1; t += this.BEZIER_SAMPLE_INTERVAL) {
-              let pos = curveQ(t, p0, cp, p1);
-              let delta = curveQDelta(t, p0, cp, p1);
-              // The only part of test we need is its roots, so this doesn't match derivative of distance otherwise
-              let test = (pos.x - p.x) * delta.x + (pos.y - p.y) * delta.y;
+            for (let t = 0; t <= 1; t += this.CURVE_SAMPLE_INTERVAL) {
+              let sample = Vertedge.curveQ(t, p0, cp, p1);
+              let delta = Vertedge.curveQDelta(t, p0, cp, p1);
+              // To find the minimum distance, the only part of the derivative of distance we need is the roots, so 'test' serves that purpose only
+              let test = (sample.x - p.x) * delta.x + (sample.y - p.y) * delta.y;
               if (t === 0 || t === 1 || lastTest <= 0 && test >= 0) {
-                let dist = Math.hypot(p.x - pos.x, p.y - pos.y);
+                let dist = Math.hypot(p.x - sample.x, p.y - sample.y);
                 if (dist < closest) {
                   closest = dist;
                   tc = t;
@@ -650,21 +446,21 @@ class VertedgeApplication extends ApperApplication {
               }
               lastTest = test;
             }
-            let pos = curveQ(tc, p0, cp, p1);
-            placed.x = pos.x;
-            placed.y = pos.y;
+            let closestPos = Vertedge.curveQ(tc, p0, cp, p1);
+            placed.x = closestPos.x;
+            placed.y = closestPos.y;
             element.cp.set(tc*cp.x + (1-tc)*p0.x, tc*cp.y + (1-tc)*p0.y);
-            other.cp = new ApperPoint(tc*p1.x + (1-tc)*cp.x, tc*p1.y + (1-tc)*cp.y);
+            other.cp = new Apper.Vector2(tc*p1.x + (1-tc)*cp.x, tc*p1.y + (1-tc)*cp.y);
           }
           element.v2 = placed;
           this.edges.push(other);
           element = placed;
           if (this.firstVertex !== null) {
-            this.edges.push(new Edge(this.firstVertex, placed));
+            this.edges.push(new Vertedge.Edge(this.firstVertex, placed));
             this.firstVertex = null;
           }
         }
-      } else if (this.toolbar.tool === Tool.ERASE) {
+      } else if (this.tool === Vertedge.Tool.ERASE) {
         if (element !== null) {
           if (!this.selection.includes(element)) this.selection = [element];
           this.deleteSelection();
@@ -673,7 +469,7 @@ class VertedgeApplication extends ApperApplication {
       }
 
       if (element === null) {
-        if (this.toolbar.tool !== Tool.MOVE && this.toolbar.tool !== Tool.CAPTURE && !event.shiftKey) this.selection = [];
+        if (canSelect && !event.shiftKey) this.selection = [];
       } else if (event.shiftKey) {
         if (this.selection.includes(element)) {
           this.selection.splice(this.selection.indexOf(element), 1);
@@ -684,7 +480,7 @@ class VertedgeApplication extends ApperApplication {
         this.selection = [element];
       }
 
-      let elements = this.selection.map(item => {
+      let elements = event.shiftKey ? [] : this.selection.map(item => {
         let orig = item.copy();
         if (orig.fill !== undefined) orig.fill = "transparent";
         orig.stroke = `#${this.color}77`;
@@ -692,7 +488,7 @@ class VertedgeApplication extends ApperApplication {
         orig.lineDash = [4, 4];
         return orig;
       });
-      let indices = this.selection.map(item => item instanceof Vertex ? this.vertices.indexOf(item) : this.edges.indexOf(item));
+      let indices = event.shiftKey ? [] : this.selection.map(item => item instanceof Vertedge.Vertex ? this.vertices.indexOf(item) : this.edges.indexOf(item));
 
       this.drag = {
         x: event.screenPos.x,
@@ -700,10 +496,10 @@ class VertedgeApplication extends ApperApplication {
         transform: this.transform,
         elements, indices,
         captureArea: this.captureArea,
-        captureResizeDirection: this.toolbar.tool === Tool.CAPTURE ? this.captureResizeDirection : null
+        captureResizeDirection: this.tool === Vertedge.Tool.CAPTURE ? this.captureResizeDirection() : null
       };
       
-      if (elements.length === 1 && elements[0] instanceof Edge && elements[0].cp === null) {
+      if (elements.length === 1 && elements[0] instanceof Vertedge.Edge && elements[0].cp === null) {
         this.drag.elements[0].cp = p.copy();
       }
     }
@@ -714,62 +510,68 @@ class VertedgeApplication extends ApperApplication {
   mouseMove(event) {
     if (event.screenPos.equals(0, 0)) return false;
     if (!this.dragging) return true;
+    if (!event.leftBtn) {
+      this.drag = null;
+      return true;
+    }
 
-    let revertX = Math.abs(event.screenPos.x - this.drag.x) <= this.REVERT_PROXIMITY * this.pixelRatio, revertY = Math.abs(event.screenPos.y - this.drag.y) <= this.REVERT_PROXIMITY * this.pixelRatio;
-    let revert = revertX && revertY;
-    let dx = (event.screenPos.x - this.drag.x) / this.pixelRatio;
-    let dy = (event.screenPos.y - this.drag.y) / this.pixelRatio;
+    const canSelect = this.tool !== Vertedge.Tool.MOVE && this.tool !== Vertedge.Tool.CAPTURE;
+    let revertX = Math.abs(event.screenPos.x - this.drag.x) <= this.REVERT_PROXIMITY * this.scale,
+        revertY = Math.abs(event.screenPos.y - this.drag.y) <= this.REVERT_PROXIMITY * this.scale,
+        revert = revertX && revertY,
+        dx = (event.screenPos.x - this.drag.x) / this.scale,
+        dy = (event.screenPos.y - this.drag.y) / this.scale;
 
-    if (this.toolbar.tool === Tool.MOVE || this.toolbar.tool === Tool.CAPTURE && this.drag.captureResizeDirection === null) {
+    if (!canSelect && this.drag.captureResizeDirection === null) {
       this.transform = revert ? this.drag.transform.translate(0, 0) : this.drag.transform.translate(dx, dy);
 
-    } else if (this.toolbar.tool === Tool.CAPTURE) {
-      let l = this.drag.captureArea.x, r = this.drag.captureArea.x + this.drag.captureArea.w, t = this.drag.captureArea.y, b = this.drag.captureArea.y + this.drag.captureArea.h;
-      switch (this.drag.captureResizeDirection) {
-        case Direction.N: if (!revertY) t += dy; if (t >= b) t = b - 1; break;
-        case Direction.E: if (!revertX) r += dx; if (r <= l) r = l + 1; break;
-        case Direction.S: if (!revertY) b += dy; if (b <= t) b = t + 1; break;
-        case Direction.W: if (!revertX) l += dx; if (l >= r) l = r - 1; break;
-        case Direction.NW: if (!revert) { t += dy; l += dx; } if (t >= b) t = b - 1; if (l >= r) l = r - 1; break;
-        case Direction.NE: if (!revert) { t += dy; r += dx; } if (t >= b) t = b - 1; if (r <= l) r = l + 1; break;
-        case Direction.SE: if (!revert) { b += dy; r += dx; } if (b <= t) b = t + 1; if (r <= l) r = l + 1; break;
-        case Direction.SW: if (!revert) { b += dy; l += dx; } if (b <= t) b = t + 1; if (l >= r) l = r - 1; break;
-        case Direction.C: if (!revert) { l += dx; r += dx; t += dy; b += dy; } break;
-        default: break;
+    } else if (this.tool === Vertedge.Tool.CAPTURE) {
+      let l = this.drag.captureArea.x, r = this.drag.captureArea.xw, t = this.drag.captureArea.y, b = this.drag.captureArea.yh;
+      if (!revertY) {
+        if (this.drag.captureResizeDirection & Vertedge.Direction.N) t += dy;
+        if (this.drag.captureResizeDirection & Vertedge.Direction.S) b += dy;
       }
-      this.captureArea = new ApperRect(l, t, r - l, b - t);
-
-    } else if (!this.drag.elements.length) {
-      // TODO: update selection w/ selectbox
+      if (!revertX) {
+        if (this.drag.captureResizeDirection & Vertedge.Direction.E) r += dx;
+        if (this.drag.captureResizeDirection & Vertedge.Direction.W) l += dx;
+      }
+      if (t > b) {
+        this.drag.captureResizeDirection ^= Vertedge.Direction.N | Vertedge.Direction.S;
+        this.drag.captureArea.y = this.drag.captureArea.yh;
+        this.drag.captureArea.h = -this.drag.captureArea.h;
+      }
+      if (l > r) {
+        this.drag.captureResizeDirection ^= Vertedge.Direction.E | Vertedge.Direction.W;
+        this.drag.captureArea.x = this.drag.captureArea.xw;
+        this.drag.captureArea.w = -this.drag.captureArea.w;
+      }
+      this.captureArea = new Apper.Rect(Math.min(l, r), Math.min(t, b), Math.abs(r - l), Math.abs(b - t));
       
     } else for (let i = 0; i < this.drag.elements.length; i++) {
       let element = this.drag.elements[i];
       let index = this.drag.indices[i];
         
-      if (element instanceof Vertex) {
+      if (element instanceof Vertedge.Vertex) {
         let vertex = this.vertices[index];
-        let p = revert ? new ApperPoint(element) : this.snapToGrid(new ApperPoint(element).add(dx, dy));
-        if (this.toolbar.tool === Tool.DRAW && this.firstVertex !== null) {
+        let p = revert ? new Apper.Vector2(element) : this.snapToGrid(new Apper.Vector2(element).add(dx, dy));
+        if (this.tool === Vertedge.Tool.DRAW && this.firstVertex !== null) {
           if (vertex !== this.firstVertex) {
-            if (!revert) console.log("change curvature");
+            if (!revert) console.log("change curvature");  // FIXME: this doesn't seem to occur
   	      }
         } else {
           vertex.x = p.x;
           vertex.y = p.y;
         }
         
-      } else if (element instanceof Edge) {
+      } else if (element instanceof Vertedge.Edge) {
         let edge = this.edges[index];
         if (this.drag.elements.length === 1) {
-          if (edge.cp === null) edge.cp = new ApperPoint();
-          let p = revert ? element.cp : this.snapToGrid(element.cp.add(dx, dy));
-          edge.cp.set(p);
+          if (!edge.cp) edge.cp = new Apper.Vector2();
+          edge.cp.set(revert ? element.cp : this.snapToGrid(element.cp.add(dx, dy)));
     
-          const v1 = edge.v1;
-          const v2 = edge.v2;
-          const cp = edge.cp;
+          const v1 = edge.v1, v2 = edge.v2, cp = edge.cp;
           const angleDiff = Math.acos(((cp.x - v1.x) * (v2.x - cp.x) + (cp.y - v1.y) * (v2.y - cp.y)) / (Math.hypot(cp.x - v1.x, cp.y - v1.y) * Math.hypot(v2.x - cp.x, v2.y - cp.y)));
-          if (angleDiff < 0.3) edge.cp = null;
+          if (angleDiff < this.REVERT_ANGLE_DIFF) edge.cp = null;
         } else if (edge.cp !== null && element.cp !== null) {
           edge.cp.set(this.snapToGrid(element.cp.add(dx, dy)))
         }
@@ -780,51 +582,57 @@ class VertedgeApplication extends ApperApplication {
   }
 
   mouseUp(event) {
-    if (event.leftBtn && this.drag !== null) {
-      let element = this.toolbar.tool === Tool.MOVE ? null : this.elementAt(this.cursorPos);
+    if (event.button === 0 && this.drag !== null) {
+      let element = this.tool === Vertedge.Tool.MOVE ? null : this.elementAt(this.cursorPos);
 
-      if (this.toolbar.tool === Tool.DRAW) {
+      if (this.tool === Vertedge.Tool.DRAW) {
         if (this.firstVertex !== null && this.firstVertex !== element) {
-          if (element instanceof Vertex) {
-            this.edges.push(new Edge(this.firstVertex, element));
+          if (element instanceof Vertedge.Vertex) {
+            this.edges.push(new Vertedge.Edge(this.firstVertex, element));
             this.selection = [element];
           } else {
             let worldPos = this.snapToGrid(this.getWorldPos(this.cursorPos));
-            let placed = new Vertex(worldPos.x, worldPos.y);
+            let placed = new Vertedge.Vertex(worldPos.x, worldPos.y);
             this.vertices.push(placed);
-            this.edges.push(new Edge(this.firstVertex, placed));
+            this.edges.push(new Vertedge.Edge(this.firstVertex, placed));
             this.selection = [placed];
           }
         }
         this.firstVertex = null;
 
-      } else if (this.toolbar.tool === Tool.CAPTURE) {
-        this.captureArea = this.captureArea.normalized;
+      } else if (this.tool === Vertedge.Tool.CAPTURE) {
+        this.captureArea = this.captureArea.normalized();
+        if (this.captureArea.w < 1) {
+          this.captureArea.w = 1;
+          if (this.drag.captureResizeDirection & Vertedge.Direction.W) this.captureArea.x -= 1;
+        }
+        if (this.captureArea.h < 1) {
+          this.captureArea.h = 1;
+          if (this.drag.captureResizeDirection & Vertedge.Direction.N) this.captureArea.y -= 1;
+        }
 
-      } else if (this.toolbar.tool !== Tool.MOVE && !this.drag.elements.length) {
+      } else if (this.tool !== Vertedge.Tool.MOVE && !this.drag.elements.length) {
         if (!event.shiftKey) this.selection = [];
-        let selectBox = new ApperRect(this.drag.x, this.drag.y, this.cursorPos.x - this.drag.x, this.cursorPos.y - this.drag.y).transform(this.transform.inverse());
+        let selectBox = new Apper.Rect(this.drag.x, this.drag.y, this.cursorPos.x - this.drag.x, this.cursorPos.y - this.drag.y).transform(this.transform.inverse());
         this.vertices.filter(vertex => {
-          return selectBox.intersects(new ApperRect(vertex.x - vertex.r, vertex.y - vertex.r, 2 * vertex.r, 2 * vertex.r));
+          return selectBox.intersects(new Apper.Rect(vertex.x - vertex.r, vertex.y - vertex.r, 2 * vertex.r, 2 * vertex.r));  // FIXME: doesn't account for shape
         }).concat(this.edges.filter(edge => {
           if (selectBox.contains(edge.v1) || selectBox.contains(edge.v2)) return true;
           if (edge.cp === null) {
-            return linesIntersect(edge.v1, edge.v2, selectBox.xy, selectBox.Xy)
-                || linesIntersect(edge.v1, edge.v2, selectBox.Xy, selectBox.XY)
-                || linesIntersect(edge.v1, edge.v2, selectBox.XY, selectBox.xY)
-                || linesIntersect(edge.v1, edge.v2, selectBox.xY, selectBox.xy);
+            return Vertedge.linesIntersect(edge.v1, edge.v2, selectBox.xy, selectBox.xwy)
+                || Vertedge.linesIntersect(edge.v1, edge.v2, selectBox.xwy, selectBox.xwyh)
+                || Vertedge.linesIntersect(edge.v1, edge.v2, selectBox.xwyh, selectBox.xyh)
+                || Vertedge.linesIntersect(edge.v1, edge.v2, selectBox.xyh, selectBox.xy);
           } else {
-            let bounds = [
-              Math.min(edge.v1.x, edge.cp.x, edge.v2.x),
-              Math.max(edge.v1.x, edge.cp.x, edge.v2.x),
-              Math.min(edge.v1.y, edge.cp.y, edge.v2.y),
-              Math.max(edge.v1.y, edge.cp.y, edge.v2.y)
-            ];
-            if (!selectBox.intersects(new ApperRect(bounds[0], bounds[2], bounds[1] - bounds[0], bounds[3] - bounds[2]))) return false;
-            let v1 = new ApperPoint(edge.v1);
-            let v2 = new ApperPoint(edge.v2);
-            for (let t = 0; t <= 1; t += this.BEZIER_SAMPLE_INTERVAL) {
-              if (selectBox.contains(curveQ(t, v1, edge.cp, v2))) return true;
+            let l = Math.min(edge.v1.x, edge.cp.x, edge.v2.x),
+                r = Math.max(edge.v1.x, edge.cp.x, edge.v2.x),
+                t = Math.min(edge.v1.y, edge.cp.y, edge.v2.y),
+                b = Math.max(edge.v1.y, edge.cp.y, edge.v2.y)
+            if (!selectBox.intersects(new Apper.Rect(l, t, r - l, b - t))) return false;
+            let v1 = new Apper.Vector2(edge.v1);
+            let v2 = new Apper.Vector2(edge.v2);
+            for (let time = 0; time <= 1; time += this.CURVE_SAMPLE_INTERVAL) {
+              if (selectBox.contains(Vertedge.curveQ(time, v1, edge.cp, v2))) return true;
             }
             return false;
           }
@@ -832,7 +640,7 @@ class VertedgeApplication extends ApperApplication {
           if (!this.selection.includes(selected)) this.selection.push(selected);
         });
         
-        if (this.toolbar.tool === Tool.ERASE) this.deleteSelection();
+        if (this.tool === Vertedge.Tool.ERASE) this.deleteSelection();
       }
 
       this.drag = null;
@@ -842,19 +650,19 @@ class VertedgeApplication extends ApperApplication {
 
   keyDown(event) {
     switch (event.key) {
-      case "keyv": this.toolbar.tool = Tool.SELECT; break;
-      case "keym": this.toolbar.tool = Tool.MOVE; break;
-      case "keyd": this.toolbar.tool = Tool.DRAW; break;
-      case "keyx": this.toolbar.tool = Tool.ERASE; break;
-      case "keys": this.toolbar.tool = Tool.STYLE; break;
-      case "keyg": this.toolbar.tool = Tool.GRID; break;
-      case "keyh": this.toolbar.tool = Tool.HELP; break;
-      case "escape": this.firstVertex = null; break;
+      case "keyv": this.tool = Vertedge.Tool.SELECT; break;
+      case "keym": this.tool = Vertedge.Tool.MOVE; break;
+      case "keyd": this.tool = Vertedge.Tool.DRAW; break;
+      case "keyx": this.tool = Vertedge.Tool.ERASE; break;
+      case "keys": this.tool = Vertedge.Tool.STYLE; break;
+      case "keyg": this.tool = Vertedge.Tool.GRID; break;
+      case "keyh": this.tool = Vertedge.Tool.HELP; break;
+      case "escape":
+        this.firstVertex = null;
+        break;
       case "backspace":
       case "delete":
-        if (!this.selection.length) return false;
-        this.deleteSelection();
-        break;
+        return this.deleteSelection();
       case "period":
       case "numpaddecimal":
         this.centerView();
@@ -867,9 +675,9 @@ class VertedgeApplication extends ApperApplication {
   }
 
   snapToGrid(pos) {
-    if (this.enableGrid.checked)
-      return new ApperPoint(Math.round(pos.x / this.grid.x) * this.grid.x, Math.round(pos.y / this.grid.y) * this.grid.y);
-    return pos;
+    if (this.widget.enableGrid.checked)
+      return new Apper.Vector2(Math.round(pos.x / this.grid.x) * this.grid.x, Math.round(pos.y / this.grid.y) * this.grid.y);
+    else return pos;
   }
 
   elementAt(pos) {
@@ -889,17 +697,19 @@ class VertedgeApplication extends ApperApplication {
   }
 
   deleteSelection() {
+    if (!this.selection.length) return false;
     this.selection.forEach(selected => {
-      if (selected instanceof Vertex) {
+      if (selected instanceof Vertedge.Vertex) {
         this.vertices.splice(this.vertices.indexOf(selected), 1);
         this.edges = this.edges.filter(edge => edge.v1 !== selected && edge.v2 !== selected);
-      } else this.edges.splice(this.edges.indexOf(selected), 1);
-      this.selection = this.selection.filter(element => this.vertices.includes(element) || this.edges.includes(element));
+      } else if (this.edges.includes(selected)) this.edges.splice(this.edges.indexOf(selected), 1);
     });
+    this.selection = [];
+    return true;
   }
 
   centerView() {
-    let oldCenter = this.getWorldPos(new ApperPoint(this.canvas.width, this.canvas.height).mul(0.5));
+    let oldCenter = this.getWorldPos(new Apper.Vector2(this.canvas.width, this.canvas.height).mul(0.5));
     this.transform = this.transform.translate(oldCenter.x, oldCenter.y);
     
     if (this.vertices.length) {
@@ -916,38 +726,44 @@ class VertedgeApplication extends ApperApplication {
     this.update();
   }
 
-  fitCaptureTo(vertices, edges) {
-    if (vertices.length) {
-      let l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
-      vertices.forEach(vertex => {
-        if (vertex.x - vertex.margin < l) l = vertex.x - vertex.margin;
-        if (vertex.x + vertex.margin > r) r = vertex.x + vertex.margin;
-        if (vertex.y - vertex.margin < t) t = vertex.y - vertex.margin;
-        if (vertex.y + vertex.margin > b) b = vertex.y + vertex.margin;
+  fitCaptureTo(elements) {
+    if (elements.length) {
+      elements = elements.slice();
+      elements.slice().forEach(element => {
+        if (element instanceof Vertedge.Edge) {
+          if (!elements.includes(element.v1)) elements.push(element.v1);
+          if (!elements.includes(element.v2)) elements.push(element.v2);
+        }
       });
-      edges.forEach(edge => {
-        if (edge.cp !== null) {
-          if (edge.cp.x < edge.v1.x && edge.cp.x < edge.v2.x || edge.cp.x > edge.v1.x && edge.cp.x > edge.v2.x) {
-            let vx = curveQVertX(edge.v1, edge.cp, edge.v2);
-            if (vx - edge.margin < l) l = vx - edge.margin;
-            if (vx + edge.margin > r) r = vx + edge.margin;
+      let l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
+      elements.forEach(element => {
+        if (element instanceof Vertedge.Vertex) {
+          if (element.x - element.margin < l) l = element.x - element.margin;
+          if (element.x + element.margin > r) r = element.x + element.margin;
+          if (element.y - element.margin < t) t = element.y - element.margin;
+          if (element.y + element.margin > b) b = element.y + element.margin;
+        } else if (element instanceof Vertedge.Edge && element.cp !== null) {
+          if (element.cp.x < element.v1.x && element.cp.x < element.v2.x || element.cp.x > element.v1.x && element.cp.x > element.v2.x) {
+            let vx = Vertedge.curveQVertX(element.v1, element.cp, element.v2);
+            if (vx - element.margin < l) l = vx - element.margin;
+            if (vx + element.margin > r) r = vx + element.margin;
           }
-          if (edge.cp.y < edge.v1.y && edge.cp.y < edge.v2.y || edge.cp.y > edge.v1.y && edge.cp.y > edge.v2.y) {
-            let vy = curveQVertY(edge.v1, edge.cp, edge.v2);
-            if (vy - edge.margin < t) t = vy - edge.margin;
-            if (vy + edge.margin > b) b = vy + edge.margin;
+          if (element.cp.y < element.v1.y && element.cp.y < element.v2.y || element.cp.y > element.v1.y && element.cp.y > element.v2.y) {
+            let vy = Vertedge.curveQVertY(element.v1, element.cp, element.v2);
+            if (vy - element.margin < t) t = vy - element.margin;
+            if (vy + element.margin > b) b = vy + element.margin;
           }
         }
       });
-      this.captureArea = new ApperRect(Math.round(l), Math.round(t), Math.round(r - l), Math.round(b - t));
+      this.captureArea = new Apper.Rect(Math.round(l), Math.round(t), Math.round(r - l), Math.round(b - t));
     } else this.captureArea = null;
   }
 
-  get captureResizeDirection() {
+  captureResizeDirection() {
     if (this.captureArea === null) return null;
 
     let pos = this.getWorldPos(this.cursorPos);
-    let broadArea = new ApperRect(
+    let broadArea = new Apper.Rect(
       this.captureArea.x - this.RESIZE_PROXIMITY,
       this.captureArea.y - this.RESIZE_PROXIMITY,
       this.captureArea.w + 2 * this.RESIZE_PROXIMITY,
@@ -962,13 +778,13 @@ class VertedgeApplication extends ApperApplication {
       let east = de <= this.RESIZE_PROXIMITY && de < dw;
       let north = dn <= this.RESIZE_PROXIMITY && dn < ds;
       let south = ds <= this.RESIZE_PROXIMITY && ds < dn;
-      if (north) return west ? Direction.NW : east ? Direction.NE : Direction.N;
-      if (south) return west ? Direction.SW : east ? Direction.SE : Direction.S;
-      if (west) return Direction.W;
-      if (east) return Direction.E;
+      if (north) return west ? Vertedge.Direction.NW : east ? Vertedge.Direction.NE : Vertedge.Direction.N;
+      if (south) return west ? Vertedge.Direction.SW : east ? Vertedge.Direction.SE : Vertedge.Direction.S;
+      if (west) return Vertedge.Direction.W;
+      if (east) return Vertedge.Direction.E;
     }
 
-    return this.captureArea.contains(pos) ? Direction.C : null;
+    return this.captureArea.contains(pos) ? Vertedge.Direction.C : null;
   }
 
   load(url) {
@@ -980,25 +796,25 @@ class VertedgeApplication extends ApperApplication {
       .then(response => response.json(), error => {
         console.error(error);
         if (error instanceof TypeError) error = "The graph URL could not be reached.";
-        this.showMessage(error, true);
+        this.showError(error);
         this.title = this.defaultTitle;
       }).then(data => {
         window.location.hash = url;
-        this.loadFromData(data);
+        this.loadFromData(data, true);
       }, error => {
         console.error(error);
         if (error instanceof SyntaxError) error = "The graph at this URL could not be read.";
-        this.showMessage(error, true);
+        this.showError(error);
         this.title = this.defaultTitle;
       });
   }
 
-  loadFromData(data) {
+  loadFromData(data, reset = false) {
     this.vertices = [];
     this.edges = [];
     
     data.vertices.forEach(raw => {
-      let vertex = new Vertex(raw.x, raw.y);
+      let vertex = new Vertedge.Vertex(raw.x, raw.y);
       if (raw.r !== undefined) vertex.r = raw.r;
       if (raw.fill !== undefined) vertex.fill = raw.fill;
       if (raw.stroke !== undefined) vertex.stroke = raw.stroke;
@@ -1009,8 +825,8 @@ class VertedgeApplication extends ApperApplication {
     });
     
     data.edges.forEach(raw => {
-      let edge = new Edge(this.vertices[raw.v1], this.vertices[raw.v2]);
-      if (raw.cp !== undefined) edge.cp = new ApperPoint(raw.cp[0], raw.cp[1]);
+      let edge = new Vertedge.Edge(this.vertices[raw.v1], this.vertices[raw.v2]);
+      if (raw.cp !== undefined) edge.cp = new Apper.Vector2(raw.cp[0], raw.cp[1]);
       if (raw.stroke !== undefined) edge.stroke = raw.stroke;
       if (raw.lineWidth !== undefined) edge.lineWidth = raw.lineWidth;
       if (raw.lineDash !== undefined) edge.lineDash = raw.lineDash.slice();
@@ -1019,8 +835,9 @@ class VertedgeApplication extends ApperApplication {
     
     if (data.title !== undefined) this.title = data.title;
     else this.title = this.defaultTitle;
-    
-    this.update();
+
+    if (reset) this.centerView();
+    else this.update();
   }
 
   get graphData() {
@@ -1032,7 +849,7 @@ class VertedgeApplication extends ApperApplication {
       lineWidth: vertex.lineWidth === 4 ? undefined : vertex.lineWidth,
       lineDash: !vertex.lineDash.length ? undefined : vertex.lineDash.slice(),
       shape: vertex.shape === 0 ? undefined : vertex.shape
-    }});
+    }; });
 
     let edges = this.edges.map(edge => { return {
       v1: this.vertices.indexOf(edge.v1), v2: this.vertices.indexOf(edge.v2),
@@ -1040,10 +857,218 @@ class VertedgeApplication extends ApperApplication {
       stroke: edge.stroke === "#666" ? undefined : edge.stroke,
       lineWidth: edge.lineWidth === 4 ? undefined : edge.lineWidth,
       lineDash: !edge.lineDash.length ? undefined : edge.lineDash.slice(),
-    }});
+    }; });
     
-    let graph = {title: this.title, vertices, edges};
-    return JSON.stringify(graph);
+    return JSON.stringify({title: this.title, vertices, edges});
   }
   
 }
+
+
+// Position at t (quadratic beziér): t²r + 2t(1-t)q + (1-t)²p
+Vertedge.curveQ = (t, p, q, r) => r.mul(t*t).add(q.mul(2*t*(1-t))).add(p.mul((1-t)*(1-t)));
+// Velocity at t (quadratic beziér): 2tr + (2(1-t)-2t)q - 2(1-t)p
+Vertedge.curveQDelta = (t, p, q, r) => r.mul(2*t).add(q.mul(2*(1-t)-2*t)).sub(p.mul(2*(1-t)));
+Vertedge.curveQVertX = (p, q, r) => p.x - 2*q.x + r.x === 0 ? null : (-q.x*q.x + 2*q.x*r.x - r.x*r.x) / (p.x - 2*q.x + r.x) + r.x;
+Vertedge.curveQVertY = (p, q, r) => p.y - 2*q.y + r.y === 0 ? null : (-q.y*q.y + 2*q.y*r.y - r.y*r.y) / (p.y - 2*q.y + r.y) + r.y;
+
+Vertedge.linesIntersect = (p1, q1, p2, q2) => Vertedge.linesIntersect.orient(p1, q1, p2) != Vertedge.linesIntersect.orient(p1, q1, q2)
+                                           && Vertedge.linesIntersect.orient(p2, q2, p1) != Vertedge.linesIntersect.orient(p2, q2, q1);
+Vertedge.linesIntersect.orient = (p1, p2, p3) => Math.sign((p2.y-p1.y)*(p3.x-p2.x) - (p2.x-p1.x)*(p3.y-p2.y));
+
+
+Vertedge.Tool = {
+  SELECT:  new Apper.Tool("select",  "Select",    "icons/select.svg",  "keyv", "v"),
+  MOVE:    new Apper.Tool("move",    "Move",      "icons/move.svg",    "keym", "m"),
+  DRAW:    new Apper.Tool("draw",    "Draw",      "icons/draw.svg",    "keyd", "d"),
+  ERASE:   new Apper.Tool("erase",   "Erase",     "icons/erase.svg",   "keyx", "x"),
+  STYLE:   new Apper.Tool("style",   "Style",     "icons/style.svg",   "keys", "s"),
+  GRID:    new Apper.Tool("grid",    "Grid",      "icons/grid.svg",    "keyg", "g"),
+  CAPTURE: new Apper.Tool("capture", "Capture",   "icons/capture.svg"),
+  DATA:    new Apper.Tool("data",    "View Data", "icons/data.svg"),
+  LOAD:    new Apper.Tool("load",    "Load",      "icons/load.svg"),
+  HELP:    new Apper.Tool("help",    "Help",      "icons/help.svg",    "keyh", "h"),
+};
+
+Vertedge.Direction = {
+  C:  0x1111,
+  N:  0x0001, E:  0x0010, S:  0x0100, W:  0x1000,
+  NE: 0x1010, NW: 0x1001, SE: 0x0110, SW: 0x1100,
+};
+
+Vertedge.Shape = {
+  CIRCLE:  0,
+  SQUARE:  1,
+  DIAMOND: 2,
+};
+
+Vertedge.Color = {
+  PURPLE: "b762f0",
+  GREEN:  "23a54c",
+  RED:    "e84b33",
+  ORANGE: "ff9421",
+};
+
+
+Vertedge.Vertex = class {
+
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.r = 10;
+    this.fill = "#666";
+    this.stroke = "#ccc";
+    this.lineWidth = 4;
+    this.lineDash = [];
+    this.shape = Vertedge.Shape.CIRCLE;
+  }
+
+  path(ctx) {
+    ctx.beginPath();
+    switch (this.shape) {
+      case Vertedge.Shape.CIRCLE:
+      default:
+        ctx.ellipse(this.x, this.y, this.r, this.r, 0, 0, 2 * Math.PI);
+        break;
+      case Vertedge.Shape.SQUARE:
+        ctx.rect(this.x - this.r, this.y - this.r, 2 * this.r, 2 * this.r);
+        break;
+      case Vertedge.Shape.DIAMOND:
+        ctx.moveTo(this.x, this.y - 1.3 * this.r);
+        ctx.lineTo(this.x - 1.3 * this.r, this.y);
+        ctx.lineTo(this.x, this.y + 1.3 * this.r);
+        ctx.lineTo(this.x + 1.3 * this.r, this.y);
+        ctx.closePath();
+        break;
+    }
+  }
+
+  draw(ctx, hover, select, highlight) {
+    if (hover || select) {
+      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
+      ctx.lineWidth = this.lineWidth + 4;
+      ctx.setLineDash([]);
+      this.path(ctx);
+      ctx.stroke();
+    }
+    ctx.fillStyle = this.fill;
+    ctx.strokeStyle = this.stroke;
+    ctx.lineWidth = this.lineWidth;
+    ctx.setLineDash(this.lineDash);
+    this.path(ctx);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  contains(ctx, pos, select) {
+    ctx.lineWidth = select ? this.lineWidth + 4 : Math.max(this.lineWidth + 4, 12);
+    this.path(ctx);
+    return ctx.isPointInPath(pos.x, pos.y) || ctx.isPointInStroke(pos.x, pos.y);
+  }
+
+  copy() {
+    let copy = new Vertedge.Vertex(this.x, this.y);
+    copy.r = this.r;
+    copy.fill = this.fill;
+    copy.stroke = this.stroke;
+    copy.lineWidth = this.lineWidth;
+    copy.lineDash = this.lineDash.slice();
+    copy.shape = this.shape;
+    return copy;
+  }
+
+  get margin() {
+    return (this.shape === Vertedge.Shape.DIAMOND ? 1.3 : 1) * this.r + 0.5 * this.lineWidth;
+  }
+  
+};
+
+
+Vertedge.Edge = class {
+
+  constructor(v1, v2) {
+    this.v1 = v1;
+    this.v2 = v2;
+    this.cp = null;
+    this.stroke = "#666";
+    this.lineWidth = 4;
+    this.lineDash = [];
+  }
+
+  path(ctx) {
+    ctx.beginPath();
+    ctx.moveTo(this.v1.x, this.v1.y);
+    if (this.cp === null) ctx.lineTo(this.v2.x, this.v2.y);
+    else ctx.quadraticCurveTo(this.cp.x, this.cp.y, this.v2.x, this.v2.y);
+  }
+
+  draw(ctx, hover, select, highlight) {
+    if (hover || select) {
+      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
+      ctx.lineWidth = this.lineWidth + 4;
+      ctx.setLineDash([]);
+      this.path(ctx);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = this.stroke;
+    ctx.lineWidth = this.lineWidth;
+    ctx.setLineDash(this.lineDash);
+    this.path(ctx);
+    ctx.stroke();
+    if (select && this.cp !== null) {
+      ctx.strokeStyle = `#${highlight}77`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([2, 5]);
+      ctx.beginPath();
+      ctx.moveTo(this.v1.x, this.v1.y);
+      ctx.lineTo(this.cp.x, this.cp.y);
+      ctx.moveTo(this.v2.x, this.v2.y);
+      ctx.lineTo(this.cp.x, this.cp.y);
+      ctx.stroke();
+      ctx.fillStyle = `#${highlight}cc`;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(this.cp.x, this.cp.y + 8);
+      ctx.lineTo(this.cp.x + 8, this.cp.y);
+      ctx.lineTo(this.cp.x, this.cp.y - 8);
+      ctx.lineTo(this.cp.x - 8, this.cp.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  contains(ctx, pos, select) {
+    if (this.cp !== null) {
+      ctx.beginPath();
+      ctx.ellipse(this.cp.x, this.cp.y, 10, 10, 0, 0, 2 * Math.PI);
+      if (ctx.isPointInPath(pos.x, pos.y)) return true;
+    }
+    ctx.lineWidth = select ? this.lineWidth + 4 : Math.max(this.lineWidth + 4, 12);
+    ctx.beginPath();
+    ctx.moveTo(this.v1.x, this.v1.y);
+    if (this.cp === null) ctx.lineTo(this.v2.x, this.v2.y);
+    else ctx.quadraticCurveTo(this.cp.x, this.cp.y, this.v2.x, this.v2.y);
+    return ctx.isPointInStroke(pos.x, pos.y);
+  }
+
+  copy() {
+    let copy = new Vertedge.Edge(this.v1.copy(), this.v2.copy());
+    copy.cp = this.cp === null ? null : this.cp.copy();
+    copy.stroke = this.stroke;
+    copy.lineWidth = this.lineWidth;
+    copy.lineDash = this.lineDash.slice();
+    return copy;
+  }
+
+  get margin() {
+    return 0.5 * this.lineWidth;
+  }
+
+};
+
+
+window.addEventListener("load", event => {
+  const vertedge = new Vertedge();
+  document.body.appendChild(vertedge.element);
+  vertedge.start();
+});
