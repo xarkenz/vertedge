@@ -63,7 +63,7 @@ class Vertedge extends Apper {
 
     this.captureMenu = this.addMenu("Capture Image")
       .addSeparator()
-      .add(this.widget.capturePrompt = new Apper.Menu.Paragraph("To capture a graph image, try adding some components to the graph."))
+      .add(this.widget.capturePrompt = new Apper.Menu.Paragraph("To capture a graph image, try adding some elements to the graph."))
       .add(this.widget.captureInstructions = new Apper.Menu.Paragraph("Resize the box to crop the resulting image. To move the view, drag from outside the box.").hide())
       .addSeparator()
       .add(this.widget.captureEmptyPreview = new Apper.Menu.Paragraph("An image preview will appear here."))
@@ -105,9 +105,22 @@ class Vertedge extends Apper {
           this.tool = this.toolbar.defaultTool;
         }));
 
-    this.helpMenu = this.addMenu("Need help?")
+    this.helpModal = this.addModal("Vertedge Help")
       .addSeparator()
-      .add(new Apper.Menu.Paragraph("Sorry, nothing here yet. Coming soon!"));
+      .add(new Apper.Menu.Paragraph("Hi! I'm a former AMR student, so I hope you'll understand that this is still a work in progress."))
+      .add(new Apper.Menu.Paragraph("If you still need help beyond this, you can email me at <a href='mailto:seanedwardsclarke@gmail.com' target='_blank' rel='noopener noreferrer'>seanedwardsclarke@gmail.com</a>."))
+      .add(new Apper.Menu.Paragraph("Please note that the only way to save graphs right now is to save the data using the <b>View Data</b> menu, or an image using the <b>Capture</b> tool. See the section below for more information on how to use these."))
+      .addSeparator()
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/select.svg'/><b>Select</b> (v)<br><br>This is the default tool. Click on vertices and edges to select them, and drag them to move them around. If you drag an edge, it will become a curve which you can adjust to your needs. To select multiple elements at once, drag from empty space to select a region or hold <b>Shift</b> when clicking on elements."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/move.svg'/><b>Move</b> (m)<br><br>This tool allows you to move the entire view by dragging. This can be especially helpful if you find yourself running out of room on the screen."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/draw.svg'/><b>Draw</b> (d)<br><br>This tool allows you to create new edges and vertices simply by clicking and dragging. You can even split edges by clicking on them."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/erase.svg'/><b>Erase</b> (x)<br><br>Use this tool to remove vertices and edges from the graph. You can also use the <b>Delete</b> key to remove the selection in any mode."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/style.svg'/><b>Style</b> (s)<br><br>This tool allows you to modify the appearance of selected elements through a menu."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/grid.svg'/><b>Grid</b> (g)<br><br>The grid can be enabled/disabled and tweaked through this menu if you want to make your graph more orderly."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/capture.svg'/><b>Capture</b><br><br>This tool allows you to download a PNG image of a region of your graph. The background is transparent, so paste wherever you need!"))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/data.svg'/><b>View Data</b><br><br>This menu contains the raw JSON data for the graph. If you want to save your graph, this would be the way to do it: copy the raw data and paste it somewhere else for safekeeping, then paste it back into this menu to load the graph again."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/load.svg'/><b>Load</b><br><br>This menu contains options for loading graphs. It's a major work in progress, so all it has now is a few examples."))
+      .add(new Apper.Menu.Paragraph("<img style='float:left' src='icons/help.svg'/><b>Help</b> (h)<br><br>You are here. Congratulations!"));
 
     this.defaultTitle = "Untitled Graph";
 
@@ -121,7 +134,7 @@ class Vertedge extends Apper {
     this.edges = [];
 
     this.update();
-    
+
     if (window.location.hash) this.load(window.location.hash.slice(1));
   }
 
@@ -141,7 +154,7 @@ class Vertedge extends Apper {
       if (this.selection.some(element => element instanceof Vertedge.Vertex)) {
         this.widget.vertexShape.element.style.display = "";
         this.widget.vertexRadius.element.style.display = "";
-        
+
         let shape = null;
         for (let element of this.selection) {
           if (element instanceof Vertedge.Vertex)
@@ -152,7 +165,7 @@ class Vertedge extends Apper {
             }
         }
         this.widget.vertexShape.value = shape;
-  
+
         let radius = null;
         for (let element of this.selection) {
           if (element instanceof Vertedge.Vertex)
@@ -177,7 +190,7 @@ class Vertedge extends Apper {
         }
       }
       this.widget.lineWidth.value = lineWidth ?? 4;
-      
+
       this.styleMenu.show();
     } else this.styleMenu.hide();
 
@@ -223,16 +236,19 @@ class Vertedge extends Apper {
     } else this.captureMenu.hide();
 
     if (this.tool === Vertedge.Tool.DATA) {
-      if (!this.widget.dataEditor.editing) this.widget.dataEditor.text = this.graphData;
-      
+      if (!this.widget.dataEditor.editing) {
+        this.widget.dataEditor.text = this.graphData;
+        this.widget.dataEditor.valid = true;
+      }
+
       this.dataMenu.show();
     } else this.dataMenu.hide();
 
     if (this.tool === Vertedge.Tool.LOAD) this.loadMenu.show();
     else this.loadMenu.hide();
 
-    if (this.tool === Vertedge.Tool.HELP) this.helpMenu.show();
-    else this.helpMenu.hide();
+    if (this.tool === Vertedge.Tool.HELP) this.helpModal.show();
+    else this.helpModal.hide();
 
     // Set cursor appearance
     if (this.tool === Vertedge.Tool.MOVE) {
@@ -266,17 +282,17 @@ class Vertedge extends Apper {
       let grid = this.grid;
       let topLeft = this.getWorldPos(new Apper.Vector2());
       let bottomRight = this.getWorldPos(new Apper.Vector2(this.canvas.width, this.canvas.height));
-      
+
       this.ctx.strokeStyle = "#fff1";
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([]);
       this.ctx.beginPath();
-      
+
       for (let x = Math.floor(topLeft.x / grid.x) * grid.x; x <= Math.ceil(bottomRight.x / grid.x) * grid.x; x += grid.x) {
         this.ctx.moveTo(x, topLeft.y);
         this.ctx.lineTo(x, bottomRight.y);
       }
-      
+
       for (let y = Math.floor(topLeft.y / grid.y) * grid.y; y <= Math.ceil(bottomRight.y / grid.y) * grid.y; y += grid.y) {
         this.ctx.moveTo(topLeft.x, y);
         this.ctx.lineTo(bottomRight.x, y);
@@ -403,7 +419,7 @@ class Vertedge extends Apper {
       const canSelect = this.tool !== Vertedge.Tool.MOVE && this.tool !== Vertedge.Tool.CAPTURE;
       let p = this.snapToGrid(event.worldPos);
       let element = canSelect ? this.elementAt(event.screenPos) : null;
-      
+
       if (this.tool === Vertedge.Tool.DRAW) {
         if (element === null) {
           let placed = new Vertedge.Vertex(p.x, p.y);
@@ -498,7 +514,7 @@ class Vertedge extends Apper {
         captureArea: this.captureArea,
         captureResizeDirection: this.tool === Vertedge.Tool.CAPTURE ? this.captureResizeDirection() : null
       };
-      
+
       if (elements.length === 1 && elements[0] instanceof Vertedge.Edge && elements[0].cp === null) {
         this.drag.elements[0].cp = p.copy();
       }
@@ -546,11 +562,11 @@ class Vertedge extends Apper {
         this.drag.captureArea.w = -this.drag.captureArea.w;
       }
       this.captureArea = new Apper.Rect(Math.min(l, r), Math.min(t, b), Math.abs(r - l), Math.abs(b - t));
-      
+
     } else for (let i = 0; i < this.drag.elements.length; i++) {
       let element = this.drag.elements[i];
       let index = this.drag.indices[i];
-        
+
       if (element instanceof Vertedge.Vertex) {
         let vertex = this.vertices[index];
         let p = revert ? new Apper.Vector2(element) : this.snapToGrid(new Apper.Vector2(element).add(dx, dy));
@@ -562,13 +578,13 @@ class Vertedge extends Apper {
           vertex.x = p.x;
           vertex.y = p.y;
         }
-        
+
       } else if (element instanceof Vertedge.Edge) {
         let edge = this.edges[index];
         if (this.drag.elements.length === 1) {
           if (!edge.cp) edge.cp = new Apper.Vector2();
           edge.cp.set(revert ? element.cp : this.snapToGrid(element.cp.add(dx, dy)));
-    
+
           const v1 = edge.v1, v2 = edge.v2, cp = edge.cp;
           const angleDiff = Math.acos(((cp.x - v1.x) * (v2.x - cp.x) + (cp.y - v1.y) * (v2.y - cp.y)) / (Math.hypot(cp.x - v1.x, cp.y - v1.y) * Math.hypot(v2.x - cp.x, v2.y - cp.y)));
           if (angleDiff < this.REVERT_ANGLE_DIFF) edge.cp = null;
@@ -639,7 +655,7 @@ class Vertedge extends Apper {
         })).forEach(selected => {
           if (!this.selection.includes(selected)) this.selection.push(selected);
         });
-        
+
         if (this.tool === Vertedge.Tool.ERASE) this.deleteSelection();
       }
 
@@ -711,7 +727,7 @@ class Vertedge extends Apper {
   centerView() {
     let oldCenter = this.getWorldPos(new Apper.Vector2(this.canvas.width, this.canvas.height).mul(0.5));
     this.transform = this.transform.translate(oldCenter.x, oldCenter.y);
-    
+
     if (this.vertices.length) {
       let l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
       this.vertices.forEach(vertex => {
@@ -791,7 +807,7 @@ class Vertedge extends Apper {
     this.title = "Loading...";
 
     let trueURL = url.startsWith("examples") ? this.HOST_URL + url : url;
-    
+
     fetch(trueURL)
       .then(response => response.json(), error => {
         console.error(error);
@@ -812,7 +828,7 @@ class Vertedge extends Apper {
   loadFromData(data, reset = false) {
     this.vertices = [];
     this.edges = [];
-    
+
     data.vertices.forEach(raw => {
       let vertex = new Vertedge.Vertex(raw.x, raw.y);
       if (raw.r !== undefined) vertex.r = raw.r;
@@ -823,7 +839,7 @@ class Vertedge extends Apper {
       if (raw.shape !== undefined) vertex.shape = raw.shape;
       this.vertices.push(vertex);
     });
-    
+
     data.edges.forEach(raw => {
       let edge = new Vertedge.Edge(this.vertices[raw.v1], this.vertices[raw.v2]);
       if (raw.cp !== undefined) edge.cp = new Apper.Vector2(raw.cp[0], raw.cp[1]);
@@ -832,7 +848,7 @@ class Vertedge extends Apper {
       if (raw.lineDash !== undefined) edge.lineDash = raw.lineDash.slice();
       this.edges.push(edge);
     });
-    
+
     if (data.title !== undefined) this.title = data.title;
     else this.title = this.defaultTitle;
 
@@ -858,10 +874,10 @@ class Vertedge extends Apper {
       lineWidth: edge.lineWidth === 4 ? undefined : edge.lineWidth,
       lineDash: !edge.lineDash.length ? undefined : edge.lineDash.slice(),
     }; });
-    
+
     return JSON.stringify({title: this.title, vertices, edges});
   }
-  
+
 }
 
 
@@ -872,8 +888,9 @@ Vertedge.curveQDelta = (t, p, q, r) => r.mul(2*t).add(q.mul(2*(1-t)-2*t)).sub(p.
 Vertedge.curveQVertX = (p, q, r) => p.x - 2*q.x + r.x === 0 ? null : (-q.x*q.x + 2*q.x*r.x - r.x*r.x) / (p.x - 2*q.x + r.x) + r.x;
 Vertedge.curveQVertY = (p, q, r) => p.y - 2*q.y + r.y === 0 ? null : (-q.y*q.y + 2*q.y*r.y - r.y*r.y) / (p.y - 2*q.y + r.y) + r.y;
 
-Vertedge.linesIntersect = (p1, q1, p2, q2) => Vertedge.linesIntersect.orient(p1, q1, p2) != Vertedge.linesIntersect.orient(p1, q1, q2)
-                                           && Vertedge.linesIntersect.orient(p2, q2, p1) != Vertedge.linesIntersect.orient(p2, q2, q1);
+Vertedge.linesIntersect = (p1, q1, p2, q2) =>
+  Vertedge.linesIntersect.orient(p1, q1, p2) != Vertedge.linesIntersect.orient(p1, q1, q2)
+  && Vertedge.linesIntersect.orient(p2, q2, p1) != Vertedge.linesIntersect.orient(p2, q2, q1);
 Vertedge.linesIntersect.orient = (p1, p2, p3) => Math.sign((p2.y-p1.y)*(p3.x-p2.x) - (p2.x-p1.x)*(p3.y-p2.y));
 
 
@@ -907,6 +924,8 @@ Vertedge.Color = {
   GREEN:  "23a54c",
   RED:    "e84b33",
   ORANGE: "ff9421",
+  BLUE: "39a0fa",
+  BLUE_TINT: "43bdff",
 };
 
 
@@ -980,7 +999,7 @@ Vertedge.Vertex = class {
   get margin() {
     return (this.shape === Vertedge.Shape.DIAMOND ? 1.3 : 1) * this.r + 0.5 * this.lineWidth;
   }
-  
+
 };
 
 
