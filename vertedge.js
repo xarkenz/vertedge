@@ -26,39 +26,67 @@ class Vertedge extends Apper {
       .addTool(Vertedge.Tool.HELP);
 
     this.widget = {};
+    this.colorOptions = [
+      Vertedge.Color.LIGHT, Vertedge.Color.MEDIUM,
+      Vertedge.Color.RED, Vertedge.Color.ORANGE, Vertedge.Color.YELLOW, Vertedge.Color.GREEN,
+      Vertedge.Color.CYAN, Vertedge.Color.BLUE, Vertedge.Color.PURPLE, Vertedge.Color.PINK,
+    ];
 
-    let icons = ["icons/shape-circle.svg", "icons/shape-square.svg", "icons/shape-diamond.svg"];
     this.styleMenu = this.addMenu("Element Style")
       .addSeparator()
-      .add(this.widget.vertexShape = new Apper.Menu.HSpread("vertedge-vertex-shape", "Shape:", icons)
+      .add(this.widget.fillColor = new Apper.Menu.HSpread("vertedge-fill-color", "Fill color:", this.colorOptions.map(color => Vertedge.fillIcon(color)), "icons/color.svg")
+        .onChange(value => {
+          this.selection.forEach(element => {
+            if (element instanceof Vertedge.Vertex) element.fill = this.colorOptions[value];
+          });
+          this.update();
+        }))
+      .add(this.widget.lineColor = new Apper.Menu.HSpread("vertedge-line-color", "Line color:", this.colorOptions.map(color => Vertedge.strokeIcon(color)), "icons/stroke.svg")
+        .onChange(value => {
+          this.selection.forEach(element => {
+            element.stroke = this.colorOptions[value];
+          });
+          this.update();
+        }))
+      .addSeparator()
+      .add(this.widget.vertexShape = new Apper.Menu.HSpread("vertedge-vertex-shape", "Shape:", ["icons/shape-circle.svg", "icons/shape-square.svg", "icons/shape-diamond.svg"], "icons/shape.svg")
         .onChange(value => {
           this.selection.forEach(element => {
             if (element instanceof Vertedge.Vertex) element.shape = value;
           });
           this.update();
         }))
-      .add(this.widget.vertexRadius = new Apper.Menu.NumberInput("vertedge-vertex-radius", "Radius:", "icons/radius.svg")
+      .add(this.widget.vertexRadius = new Apper.Menu.NumberInput("vertedge-vertex-radius", "Radius:", "icons/radius.svg").setMin(0)
         .onChange(value => {
           this.selection.forEach(element => {
-            if (element instanceof Vertedge.Vertex) element.r = value;
+            if (element instanceof Vertedge.Vertex) element.r = this.widget.vertexRadius.value;
           });
           this.update();
         }))
-      .add(this.widget.lineWidth = new Apper.Menu.NumberInput("vertedge-line-width", "Line width:", "icons/line-width.svg")
+      .add(this.widget.lineWidth = new Apper.Menu.NumberInput("vertedge-line-width", "Line width:", "icons/line-width.svg").setMin(0)
         .onChange(value => {
           this.selection.forEach(element => {
-            element.lineWidth = value;
+            element.lineWidth = this.widget.lineWidth.value;
+          });
+          this.update();
+        }))
+      .add(this.widget.lineDash = new Apper.Menu.Checkbox("vertedge-line-dash", "Dashed line")
+        .onChange(value => {
+          this.selection.forEach(element => {
+            element.lineDash = value ? [2, 2] : [];
           });
           this.update();
         }));
 
     this.gridMenu = this.addMenu("Grid Settings")
       .addSeparator()
+      .add(this.widget.enableAxes = new Apper.Menu.Checkbox("vertedge-enable-axes", "Enable axes")
+        .onChange(value => this.update()))
       .add(this.widget.enableGrid = new Apper.Menu.Checkbox("vertedge-enable-grid", "Enable grid")
         .onChange(value => this.update()))
-      .add(this.widget.gridWidth = new Apper.Menu.NumberInput("vertedge-grid-width", "Horizontal spacing:", "icons/width.svg", 50)
+      .add(this.widget.gridWidth = new Apper.Menu.NumberInput("vertedge-grid-width", "Horizontal spacing:", "icons/width.svg", 50).setMin(1)
         .onChange(value => this.update()))
-      .add(this.widget.gridHeight = new Apper.Menu.NumberInput("vertedge-grid-height", "Vertical spacing:", "icons/height.svg", 50)
+      .add(this.widget.gridHeight = new Apper.Menu.NumberInput("vertedge-grid-height", "Vertical spacing:", "icons/height.svg", 50).setMin(1)
         .onChange(value => this.update()));
 
     this.captureMenu = this.addMenu("Capture Image")
@@ -147,18 +175,31 @@ class Vertedge extends Apper {
     if (!this.toolbar) return;
 
     const element = this.tool === Vertedge.Tool.MOVE || this.tool === Vertedge.Tool.CAPTURE ? null : this.elementAt(this.cursorPos);
-    this.color = this.tool === Vertedge.Tool.DRAW ? Vertedge.Color.GREEN
+    this.color = this.tool === Vertedge.Tool.DRAW ? Vertedge.Color.GREEN_DARK
                : this.tool === Vertedge.Tool.ERASE ? Vertedge.Color.RED
                : Vertedge.Color.PURPLE;
-    const captureResizeDirection = this.captureResizeDirection();
+    const captureResizeDirection = this.tool === Vertedge.Tool.CAPTURE ? this.captureResizeDirection() : null;
 
     if (this.tool !== Vertedge.Tool.DRAW) this.firstVertex = null;
     if (this.tool !== Vertedge.Tool.CAPTURE) this.captureArea = null;
 
     if (this.tool === Vertedge.Tool.STYLE && this.selection.length) {
       if (this.selection.some(element => element instanceof Vertedge.Vertex)) {
+        this.widget.fillColor.element.style.display = "";
         this.widget.vertexShape.element.style.display = "";
         this.widget.vertexRadius.element.style.display = "";
+
+        let fillColor = null;
+        for (let element of this.selection) {
+          if (element instanceof Vertedge.Vertex)
+            if (fillColor === null) fillColor = this.colorOptions.indexOf(element.fill);
+            else if (element.fill !== fillColor) {
+              fillColor = null;
+              break;
+            }
+        }
+        if (fillColor === -1) fillColor = null;
+        this.widget.fillColor.value = fillColor;
 
         let shape = null;
         for (let element of this.selection) {
@@ -182,9 +223,21 @@ class Vertedge extends Apper {
         }
         this.widget.vertexRadius.value = radius ?? 10;
       } else {
+        this.widget.fillColor.element.style.display = "none";
         this.widget.vertexShape.element.style.display = "none";
         this.widget.vertexRadius.element.style.display = "none";
       }
+
+      let lineColor = null;
+      for (let element of this.selection) {
+        if (lineColor === null) lineColor = this.colorOptions.indexOf(element.stroke);
+        else if (element.stroke !== lineColor) {
+          lineColor = null;
+          break;
+        }
+      }
+      if (lineColor === -1) lineColor = null;
+      this.widget.lineColor.value = lineColor;
 
       let lineWidth = null;
       for (let element of this.selection) {
@@ -195,6 +248,8 @@ class Vertedge extends Apper {
         }
       }
       this.widget.lineWidth.value = lineWidth ?? 4;
+
+      this.widget.lineDash.value = this.vertices.concat(this.edges).some(element => element.lineDash.length > 1);
 
       this.styleMenu.show();
     } else this.styleMenu.hide();
@@ -286,28 +341,44 @@ class Vertedge extends Apper {
     this.ctx.lineCap = "round";
     this.ctx.lineJoin = "round";
 
-    // Grid
-    if (this.widget.enableGrid.checked) {
-      let grid = this.grid;
-      let topLeft = this.getWorldPos(new Apper.Vector2());
-      let bottomRight = this.getWorldPos(new Apper.Vector2(this.canvas.width, this.canvas.height));
+    // Grid and/or axes
+    const grid = this.grid, drawGrid = this.widget.enableGrid.checked && grid.x >= 1 && grid.y >= 1, drawAxes = this.widget.enableAxes.checked;
+    if (drawGrid || drawAxes) {
+      let topLeft = this.getWorldPos(new Apper.Vector2()), bottomRight = this.getWorldPos(new Apper.Vector2(this.canvas.width, this.canvas.height));
 
-      this.ctx.strokeStyle = "#fff1";
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([]);
-      this.ctx.beginPath();
 
-      for (let x = Math.floor(topLeft.x / grid.x) * grid.x; x <= Math.ceil(bottomRight.x / grid.x) * grid.x; x += grid.x) {
-        this.ctx.moveTo(x, topLeft.y);
-        this.ctx.lineTo(x, bottomRight.y);
+      if (drawGrid) {
+        this.ctx.strokeStyle = "#fff1";
+        this.ctx.beginPath();
+
+        for (let x = Math.floor(topLeft.x / grid.x) * grid.x; x <= Math.ceil(bottomRight.x / grid.x) * grid.x; x += grid.x) {
+          if (drawAxes && x === 0) continue;
+          this.ctx.moveTo(x, topLeft.y);
+          this.ctx.lineTo(x, bottomRight.y);
+        }
+
+        for (let y = Math.floor(topLeft.y / grid.y) * grid.y; y <= Math.ceil(bottomRight.y / grid.y) * grid.y; y += grid.y) {
+          if (drawAxes && y === 0) continue;
+          this.ctx.moveTo(topLeft.x, y);
+          this.ctx.lineTo(bottomRight.x, y);
+        }
+
+        this.ctx.stroke();
       }
 
-      for (let y = Math.floor(topLeft.y / grid.y) * grid.y; y <= Math.ceil(bottomRight.y / grid.y) * grid.y; y += grid.y) {
-        this.ctx.moveTo(topLeft.x, y);
-        this.ctx.lineTo(bottomRight.x, y);
-      }
+      if (drawAxes) {
+        this.ctx.strokeStyle = "#fff3";
+        this.ctx.beginPath();
 
-      this.ctx.stroke();
+        this.ctx.moveTo(Math.floor(topLeft.x / grid.x) * grid.x, 0);
+        this.ctx.lineTo(Math.ceil(bottomRight.x / grid.x) * grid.x, 0);
+        this.ctx.moveTo(0, Math.floor(topLeft.y / grid.y) * grid.y);
+        this.ctx.lineTo(0, Math.ceil(bottomRight.y / grid.y) * grid.y);
+
+        this.ctx.stroke();
+      }
     }
 
     // Original element position indicators
@@ -315,7 +386,7 @@ class Vertedge extends Apper {
       for (let element of this.drag.elements) {
         element.draw(this.ctx, false, false, this.color);
         if (element instanceof Vertedge.Edge && element.cp !== null) {
-          this.ctx.strokeStyle = `#${this.color}77`;
+          this.ctx.strokeStyle = `${this.color}77`;
           this.ctx.lineWidth = 2;
           this.ctx.setLineDash([]);
           this.ctx.beginPath();
@@ -337,7 +408,7 @@ class Vertedge extends Apper {
     if (this.tool === Vertedge.Tool.DRAW && !this.cursorPos.equals(0, 0)) {
       let worldPos = this.snapToGrid(this.getWorldPos(this.cursorPos));
       if (this.firstVertex !== null) {
-        this.ctx.strokeStyle = `#${this.color}aa`;
+        this.ctx.strokeStyle = `${this.color}aa`;
         this.ctx.lineWidth = 2;
         this.ctx.setLineDash([5, 5]);
         this.ctx.beginPath();
@@ -355,7 +426,7 @@ class Vertedge extends Apper {
       }
       // Cursor dot
       if ((element == null || element instanceof Vertedge.Edge) && !this.ctrlKey) {
-        this.ctx.fillStyle = `#${this.color}aa`;
+        this.ctx.fillStyle = `${this.color}aa`;
         this.ctx.beginPath();
         this.ctx.ellipse(worldPos.x, worldPos.y, 5, 5, 0, 0, 2 * Math.PI);
         this.ctx.fill();
@@ -366,7 +437,7 @@ class Vertedge extends Apper {
     if (this.tool !== Vertedge.Tool.MOVE && this.tool !== Vertedge.Tool.DRAW && this.tool !== Vertedge.Tool.CAPTURE && this.dragging && !this.drag.elements.length && !this.cursorPos.equals(0, 0)) {
       let start = this.getWorldPos(new Apper.Vector2(this.drag.x, this.drag.y));
       let end = this.getWorldPos(this.cursorPos);
-      this.ctx.strokeStyle = `#${this.color}77`;
+      this.ctx.strokeStyle = `${this.color}77`;
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([5, 5]);
       // Below differs from ctx.rect() because it locks the line dash at the start and end corners, which looks nicer
@@ -384,8 +455,8 @@ class Vertedge extends Apper {
 
     // Capture box
     if (this.tool === Vertedge.Tool.CAPTURE && this.captureArea !== null) {
-      this.ctx.fillStyle = `#${Vertedge.Color.ORANGE}33`;
-      this.ctx.strokeStyle = `#${Vertedge.Color.ORANGE}aa`;
+      this.ctx.fillStyle = `${Vertedge.Color.ORANGE}33`;
+      this.ctx.strokeStyle = `${Vertedge.Color.ORANGE}aa`;
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([]);
       this.ctx.beginPath();
@@ -409,7 +480,7 @@ class Vertedge extends Apper {
       this.ctx.stroke();
       // Indicator for hovering over a resize portion
       if (this.drag?.captureResizeDirection ?? captureResizeDirection != null) {
-        this.ctx.fillStyle = this.drag?.captureResizeDirection != null ? `#${Vertedge.Color.ORANGE}aa` : `#${Vertedge.Color.ORANGE}77`;
+        this.ctx.fillStyle = this.drag?.captureResizeDirection != null ? `${Vertedge.Color.ORANGE}aa` : `${Vertedge.Color.ORANGE}77`;
         this.ctx.beginPath();
         switch (this.drag?.captureResizeDirection ?? captureResizeDirection) {
           case Vertedge.Direction.N: this.ctx.rect(midX - 6, this.captureArea.y - 6, 12, 12); break;
@@ -512,7 +583,7 @@ class Vertedge extends Apper {
       let elements = event.shiftKey ? [] : this.selection.map(item => {
         let orig = item.copy();
         if (orig.fill !== undefined) orig.fill = "transparent";
-        orig.stroke = `#${this.color}77`;
+        orig.stroke = `${this.color}77`;
         orig.lineWidth = 2;
         orig.lineDash = [4, 4];
         return orig;
@@ -901,8 +972,8 @@ class Vertedge extends Apper {
     let vertices = this.vertices.map(vertex => { return {
       x: vertex.x, y: vertex.y,
       r: vertex.r === 10 ? undefined : vertex.r,
-      fill: vertex.fill === "#666" ? undefined : vertex.fill,
-      stroke: vertex.stroke === "#ccc" ? undefined : vertex.stroke,
+      fill: vertex.fill === Vertedge.Color.MEDIUM ? undefined : vertex.fill,
+      stroke: vertex.stroke === Vertedge.Color.LIGHT ? undefined : vertex.stroke,
       lineWidth: vertex.lineWidth === 4 ? undefined : vertex.lineWidth,
       lineDash: !vertex.lineDash.length ? undefined : vertex.lineDash.slice(),
       shape: vertex.shape === 0 ? undefined : vertex.shape
@@ -911,7 +982,7 @@ class Vertedge extends Apper {
     let edges = this.edges.map(edge => { return {
       v1: this.vertices.indexOf(edge.v1), v2: this.vertices.indexOf(edge.v2),
       cp: edge.cp === null ? undefined : [edge.cp.x, edge.cp.y],
-      stroke: edge.stroke === "#666" ? undefined : edge.stroke,
+      stroke: edge.stroke === Vertedge.Color.MEDIUM ? undefined : edge.stroke,
       lineWidth: edge.lineWidth === 4 ? undefined : edge.lineWidth,
       lineDash: !edge.lineDash.length ? undefined : edge.lineDash.slice(),
     }; });
@@ -933,6 +1004,15 @@ Vertedge.linesIntersect = (p1, q1, p2, q2) =>
   Vertedge.linesIntersect.orient(p1, q1, p2) != Vertedge.linesIntersect.orient(p1, q1, q2)
   && Vertedge.linesIntersect.orient(p2, q2, p1) != Vertedge.linesIntersect.orient(p2, q2, q1);
 Vertedge.linesIntersect.orient = (p1, p2, p3) => Math.sign((p2.y-p1.y)*(p3.x-p2.x) - (p2.x-p1.x)*(p3.y-p2.y));
+
+Vertedge.fillIcon = (color) => `
+  <svg version="1.1" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+      <ellipse fill="${color}" stroke="none" cx="16" cy="16" rx="8" ry="8"/>
+  </svg>`;
+Vertedge.strokeIcon = (color) => `
+  <svg version="1.1" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+      <ellipse fill="none" stroke="${color}" stroke-width="2" cx="16" cy="16" rx="8" ry="8"/>
+  </svg>`;
 
 
 Vertedge.Tool = {
@@ -961,12 +1041,25 @@ Vertedge.Shape = {
 };
 
 Vertedge.Color = {
-  PURPLE: "b762f0",
-  GREEN:  "23a54c",
-  RED:    "e84b33",
-  ORANGE: "ff9421",
-  BLUE: "39a0fa",
-  BLUE_TINT: "43bdff",
+  LIGHT:       "#ccc",
+  MEDIUM:      "#666",
+  RED:         "#e84b33",
+  RED_TINT:    "#f46b30",
+  ORANGE:      "#ff9421",
+  ORANGE_TINT: "#ffb128",
+  YELLOW:      "#ffd731",
+  YELLOW_TINT: "#ffef42",
+  GREEN:       "#39d12a",
+  GREEN_TINT:  "#72e02d",
+  GREEN_DARK:  "#23a54c",
+  CYAN:        "#16dbbd",
+  CYAN_TINT:   "#58ebdf",
+  BLUE:        "#39a0fa",
+  BLUE_TINT:   "#43bdff",
+  PURPLE:      "#b762f0",
+  PURPLE_TINT: "#e074f7",
+  PINK:        "#ff5ed5",
+  PINK_TINT:   "#ff83c6",
 };
 
 
@@ -976,8 +1069,8 @@ Vertedge.Vertex = class {
     this.x = x;
     this.y = y;
     this.r = 10;
-    this.fill = "#666";
-    this.stroke = "#ccc";
+    this.fill = Vertedge.Color.MEDIUM;
+    this.stroke = Vertedge.Color.LIGHT;
     this.lineWidth = 4;
     this.lineDash = [];
     this.shape = Vertedge.Shape.CIRCLE;
@@ -1004,8 +1097,9 @@ Vertedge.Vertex = class {
   }
 
   draw(ctx, hover, select, highlight) {
+    this.r = Math.abs(this.r);
     if (hover || select) {
-      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
+      ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
       ctx.lineWidth = this.lineWidth + 4;
       ctx.setLineDash([]);
       this.path(ctx);
@@ -1014,10 +1108,10 @@ Vertedge.Vertex = class {
     ctx.fillStyle = this.fill;
     ctx.strokeStyle = this.stroke;
     ctx.lineWidth = this.lineWidth;
-    ctx.setLineDash(this.lineDash);
+    ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth));
     this.path(ctx);
     ctx.fill();
-    ctx.stroke();
+    if (this.lineWidth > 0) ctx.stroke();
   }
 
   contains(ctx, pos, select) {
@@ -1050,7 +1144,7 @@ Vertedge.Edge = class {
     this.v1 = v1;
     this.v2 = v2;
     this.cp = null;
-    this.stroke = "#666";
+    this.stroke = Vertedge.Color.MEDIUM;
     this.lineWidth = 4;
     this.lineDash = [];
   }
@@ -1071,7 +1165,7 @@ Vertedge.Edge = class {
 
   draw(ctx, hover, select, highlight) {
     if (hover || select) {
-      ctx.strokeStyle = select ? `#${highlight}cc` : `#${highlight}99`;
+      ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
       ctx.lineWidth = this.lineWidth + 4;
       ctx.setLineDash([]);
       this.path(ctx);
@@ -1079,12 +1173,12 @@ Vertedge.Edge = class {
     }
     ctx.strokeStyle = this.stroke;
     ctx.lineWidth = this.lineWidth;
-    ctx.setLineDash(this.lineDash);
+    ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth));
     this.path(ctx);
-    ctx.stroke();
+    if (this.lineWidth > 0) ctx.stroke();
     if (select && this.cp !== null) {
       if (!this.isLoop) {
-        ctx.strokeStyle = `#${highlight}77`;
+        ctx.strokeStyle = `${highlight}77`;
         ctx.lineWidth = 2;
         ctx.setLineDash([2, 5]);
         ctx.beginPath();
@@ -1094,7 +1188,7 @@ Vertedge.Edge = class {
         ctx.lineTo(this.cp.x, this.cp.y);
         ctx.stroke();
       }
-      ctx.fillStyle = `#${highlight}cc`;
+      ctx.fillStyle = `${highlight}cc`;
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(this.cp.x, this.cp.y + 8);
