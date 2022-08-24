@@ -93,6 +93,8 @@ class Vertedge extends Apper {
       .addSeparator()
       .add(this.widget.capturePrompt = new Apper.Menu.Paragraph("To capture a graph image, try adding some elements to the graph."))
       .add(this.widget.captureInstructions = new Apper.Menu.Paragraph("Resize the box to crop the resulting image. To move the view, drag from outside the box.").hide())
+      .add(this.widget.captureSelectionOnly = new Apper.Menu.Checkbox("vertedge-capture-selection-only", "Capture selection only").hide()
+        .onChange(value => this.update()))
       .add(this.widget.captureFitGraph = new Apper.Menu.Button("Fit Entire Graph").hide()
         .onClick(() => this.fitCaptureTo(this.vertices.concat(this.edges))))
       .addSeparator()
@@ -181,7 +183,6 @@ class Vertedge extends Apper {
     const captureResizeDirection = this.tool === Vertedge.Tool.CAPTURE ? this.captureResizeDirection() : null;
 
     if (this.tool !== Vertedge.Tool.DRAW) this.firstVertex = null;
-    if (this.tool !== Vertedge.Tool.CAPTURE) this.captureArea = null;
 
     if (this.tool === Vertedge.Tool.STYLE && this.selection.length) {
       if (this.selection.some(element => element instanceof Vertedge.Vertex)) {
@@ -249,7 +250,7 @@ class Vertedge extends Apper {
       }
       this.widget.lineWidth.value = lineWidth ?? 4;
 
-      this.widget.lineDash.value = this.vertices.concat(this.edges).some(element => element.lineDash.length > 1);
+      this.widget.lineDash.checked = this.selection.some(element => element.lineDash.length > 1);
 
       this.styleMenu.show();
     } else this.styleMenu.hide();
@@ -260,12 +261,13 @@ class Vertedge extends Apper {
     if (this.tool === Vertedge.Tool.CAPTURE) {
       if (this.captureArea === null) this.fitCaptureTo(this.selection.length ? this.selection : this.vertices.concat(this.edges), false);
       if (this.captureArea === null) {
-        this.widget.captureInstructions.hide();
-        this.widget.capturePreview.hide();
-        this.widget.captureFitGraph.hide();
-        this.widget.captureDownload.hide();
         this.widget.capturePrompt.show();
         this.widget.captureEmptyPreview.show();
+        this.widget.captureInstructions.hide();
+        this.widget.captureSelectionOnly.hide();
+        this.widget.captureFitGraph.hide();
+        this.widget.capturePreview.hide();
+        this.widget.captureDownload.hide();
 
         this.widget.captureDownload.url = "";
         this.widget.captureDownload.filename = "";
@@ -273,8 +275,9 @@ class Vertedge extends Apper {
         this.widget.capturePrompt.hide();
         this.widget.captureEmptyPreview.hide();
         this.widget.captureInstructions.show();
-        this.widget.capturePreview.show();
+        this.widget.captureSelectionOnly.show();
         this.widget.captureFitGraph.show();
+        this.widget.capturePreview.show();
         this.widget.captureDownload.show();
 
         this.widget.capturePreview.label = `Preview (${this.captureArea.w} \u00d7 ${this.captureArea.h}):`
@@ -286,9 +289,11 @@ class Vertedge extends Apper {
         this.widget.capturePreview.ctx.lineJoin = "round";
 
         this.edges.forEach(edge => {
+          if (this.widget.captureSelectionOnly.checked && !this.selection.includes(edge)) return;
           edge.draw(this.widget.capturePreview.ctx, false, false, this.color);
         });
         this.vertices.forEach(vertex => {
+          if (this.widget.captureSelectionOnly.checked && !this.selection.includes(vertex)) return;
           vertex.draw(this.widget.capturePreview.ctx, false, false, this.color);
         });
 
@@ -297,7 +302,10 @@ class Vertedge extends Apper {
       }
 
       this.captureMenu.show();
-    } else this.captureMenu.hide();
+    } else {
+      this.captureMenu.hide();
+      this.captureArea = null;
+    }
 
     if (this.tool === Vertedge.Tool.DATA) {
       if (!this.widget.dataEditor.editing) {
@@ -548,6 +556,8 @@ class Vertedge extends Apper {
           if (this.firstVertex !== null) {
             this.edges.push(new Vertedge.Edge(this.firstVertex, placed));
             this.firstVertex = null;
+          } else {
+            this.firstVertex = element;
           }
         } else {
           let placed = new Vertedge.Vertex(p.x, p.y);
@@ -772,6 +782,9 @@ class Vertedge extends Apper {
       case "keys": this.tool = Vertedge.Tool.STYLE; break;
       case "keyg": this.tool = Vertedge.Tool.GRID; break;
       case "keyh": this.tool = Vertedge.Tool.HELP; break;
+      case "keya":
+        if (event.ctrlKey) return event.shiftKey ? this.deselectAll() : this.selectAll();
+        return false;
       case "escape":
         this.firstVertex = null;
         break;
@@ -809,6 +822,18 @@ class Vertedge extends Apper {
     }
 
     return null;
+  }
+
+  selectAll() {
+    this.selection = this.vertices.concat(this.edges);
+
+    return true;
+  }
+
+  deselectAll() {
+    this.selection = [];
+
+    return true;
   }
 
   deleteSelection() {
@@ -859,25 +884,36 @@ class Vertedge extends Apper {
           if (element.x + element.margin > r) r = element.x + element.margin;
           if (element.y - element.margin < t) t = element.y - element.margin;
           if (element.y + element.margin > b) b = element.y + element.margin;
-        } else if (element instanceof Vertedge.Edge && element.cp !== null) {
-          if (element.isLoop) {
-            let center = element.cp.add(element.v1).mul(0.5),
-                radius = 0.5 * Math.hypot(element.cp.x - element.v1.x, element.cp.y - element.v1.y);
-            if (center.x - radius - element.margin < l) l = center.x - radius - element.margin;
-            if (center.x + radius + element.margin > r) r = center.x + radius + element.margin;
-            if (center.y - radius - element.margin < t) t = center.y - radius - element.margin;
-            if (center.y + radius + element.margin > b) b = center.y + radius + element.margin;
+        } else if (element instanceof Vertedge.Edge) {
+          if (element.cp !== null) {
+            if (element.isLoop) {
+              let center = element.cp.add(element.v1).mul(0.5),
+                  radius = 0.5 * Math.hypot(element.cp.x - element.v1.x, element.cp.y - element.v1.y);
+              if (center.x - radius - element.margin < l) l = center.x - radius - element.margin;
+              if (center.x + radius + element.margin > r) r = center.x + radius + element.margin;
+              if (center.y - radius - element.margin < t) t = center.y - radius - element.margin;
+              if (center.y + radius + element.margin > b) b = center.y + radius + element.margin;
+            } else {
+              if (element.cp.x < element.v1.x && element.cp.x < element.v2.x || element.cp.x > element.v1.x && element.cp.x > element.v2.x) {
+                let vx = Vertedge.curveQVertX(element.v1, element.cp, element.v2);
+                if (vx - element.margin < l) l = vx - element.margin;
+                if (vx + element.margin > r) r = vx + element.margin;
+              }
+              if (element.cp.y < element.v1.y && element.cp.y < element.v2.y || element.cp.y > element.v1.y && element.cp.y > element.v2.y) {
+                let vy = Vertedge.curveQVertY(element.v1, element.cp, element.v2);
+                if (vy - element.margin < t) t = vy - element.margin;
+                if (vy + element.margin > b) b = vy + element.margin;
+              }
+            }
           } else {
-            if (element.cp.x < element.v1.x && element.cp.x < element.v2.x || element.cp.x > element.v1.x && element.cp.x > element.v2.x) {
-              let vx = Vertedge.curveQVertX(element.v1, element.cp, element.v2);
-              if (vx - element.margin < l) l = vx - element.margin;
-              if (vx + element.margin > r) r = vx + element.margin;
-            }
-            if (element.cp.y < element.v1.y && element.cp.y < element.v2.y || element.cp.y > element.v1.y && element.cp.y > element.v2.y) {
-              let vy = Vertedge.curveQVertY(element.v1, element.cp, element.v2);
-              if (vy - element.margin < t) t = vy - element.margin;
-              if (vy + element.margin > b) b = vy + element.margin;
-            }
+            if (element.v1.x - element.margin < l) l = element.v1.x - element.margin;
+            if (element.v1.x + element.margin > r) r = element.v1.x + element.margin;
+            if (element.v1.y - element.margin < t) t = element.v1.y - element.margin;
+            if (element.v1.y + element.margin > b) b = element.v1.y + element.margin;
+            if (element.v2.x - element.margin < l) l = element.v2.x - element.margin;
+            if (element.v2.x + element.margin > r) r = element.v2.x + element.margin;
+            if (element.v2.y - element.margin < t) t = element.v2.y - element.margin;
+            if (element.v2.y + element.margin > b) b = element.v2.y + element.margin;
           }
         }
       });
