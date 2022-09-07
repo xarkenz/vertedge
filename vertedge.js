@@ -1185,7 +1185,7 @@ Vertedge.Vertex = class {
     if (!screen) pos = view.transform(pos);
     ctx.lineWidth = select ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
     this.path(ctx, view);
-    return ctx.isPointInPath(pos.x, pos.y) || ctx.isPointInStroke(pos.x, pos.y);
+    return ctx.isPointInPath(pos.x * this.scale, pos.y * this.scale) || ctx.isPointInStroke(pos.x * this.scale, pos.y * this.scale);
   }
 
   copy() {
@@ -1275,11 +1275,11 @@ Vertedge.Edge = class {
       const cp = view.transform(this.cp);
       ctx.beginPath();
       ctx.ellipse(cp.x * view.zoom, cp.y * view.zoom, 10, 10, 0, 0, 2 * Math.PI);
-      if (ctx.isPointInPath(pos.x, pos.y)) return true;
+      if (ctx.isPointInPath(pos.x * this.scale, pos.y * this.scale)) return true;
     }
     ctx.lineWidth = select ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
     this.path(ctx, view);
-    return ctx.isPointInStroke(pos.x, pos.y);
+    return ctx.isPointInStroke(pos.x * this.scale, pos.y * this.scale);
   }
 
   copy() {
