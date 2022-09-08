@@ -705,7 +705,7 @@ class Vertedge extends Apper {
             this.ctx.beginPath();
             this.ctx.moveTo(this.transformX(edge.v1.x), this.transformY(edge.v1.y));
             this.ctx.lineTo(this.transformX(edge.v2.x), this.transformY(edge.v2.y));
-            if (this.ctx.isPointInStroke(this.transformX(edge.cp.x), this.transformY(edge.cp.y)))
+            if (this.ctx.isPointInStroke(this.transformX(edge.cp.x) * this.scale, this.transformY(edge.cp.y) * this.scale))
               edge.cp = null;
           }
         } else if (edge.cp !== null && element.cp !== null) {
@@ -1274,7 +1274,7 @@ Vertedge.Edge = class {
     if (this.cp !== null) {
       const cp = view.transform(this.cp);
       ctx.beginPath();
-      ctx.ellipse(cp.x * view.zoom, cp.y * view.zoom, 10, 10, 0, 0, 2 * Math.PI);
+      ctx.ellipse(cp.x, cp.y, 10, 10, 0, 0, 2 * Math.PI);
       if (ctx.isPointInPath(pos.x * view.scale, pos.y * view.scale)) return true;
     }
     ctx.lineWidth = select ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
