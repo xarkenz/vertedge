@@ -350,6 +350,15 @@
     color: #43bdff;
 }
 
+.apper-paragraph kbd {
+    padding: 2px;
+    border: none;
+    border-radius: 3px;
+    background: #ccc2;
+    font-family: 'Cousine', monospace;
+    font-size: inherit;
+}
+
 
 .apper-button {
     display: flex;
@@ -367,6 +376,7 @@
     text-decoration: none;
     font-size: 14px;
     font-family: inherit;
+    cursor: pointer;
     flex-direction: row;
     align-items: center;
     justify-content: center;
@@ -376,7 +386,6 @@
 
 .apper-button:hover {
     background: #ccc3;
-    cursor: pointer;
 }
 
 .apper-button:active {
@@ -576,6 +585,7 @@
     text-align: left;
     font-size: 14px;
     font-family: inherit;
+    cursor: pointer;
     transition: background-color 0.25s;
 }
 
@@ -589,7 +599,6 @@
 
 .apper-button-list > div > button:hover {
     background: #ccc3;
-    cursor: pointer;
 }
 
 
@@ -623,6 +632,44 @@
     position: absolute;
     left: 0;
     top: 6px;
+}
+
+
+.apper-file-input {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: min-content;
+    box-sizing: border-box;
+    margin: 8px 0;
+    padding: 8px;
+    border: none;
+    border-radius: 8px;
+    background: #ccc1;
+    color: #ccc;
+    text-align: center;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.25s;
+}
+
+.apper-file-input > input {
+    display: none;
+}
+
+.apper-file-input > span {
+    display: flex;
+    position: relative;
+    box-sizing: border-box;
+    border-radius: 6px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.apper-file-input:hover {
+    background: #ccc3;
 }
 
 

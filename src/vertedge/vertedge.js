@@ -72,6 +72,7 @@ var vertedge = vertedge || (() => {
         CAPTURE: new apper.Tool("capture", "Capture", getAsset("icons/capture.svg")),
         DATA: new apper.Tool("data", "View Data", getAsset("icons/data.svg")),
         LOAD: new apper.Tool("load", "Load", getAsset("icons/load.svg")),
+        SAVE: new apper.Tool("save", "Save", getAsset("icons/save.svg")),
         HELP: new apper.Tool("help", "Help", getAsset("icons/help.svg"), new apper.Shortcut("h")),
     };
 
@@ -326,8 +327,9 @@ var vertedge = vertedge || (() => {
                 .addTool(Tools.GRID)
                 .addSpacer()
                 .addTool(Tools.CAPTURE)
-                .addTool(Tools.DATA)
                 .addTool(Tools.LOAD)
+                .addTool(Tools.SAVE)
+                .addTool(Tools.DATA)
                 .addTool(Tools.HELP);
 
             this.widget = {};
@@ -430,7 +432,28 @@ var vertedge = vertedge || (() => {
                 .addSeparator()
                 .add(this.widget.captureEmptyPreview = new apper.widget.Paragraph("An image preview will appear here."))
                 .add(this.widget.capturePreview = new apper.widget.CanvasImage("Preview:").hide())
-                .add(this.widget.captureDownload = new apper.widget.Button(`<img src=${getAsset("icons/download.svg")}/> Download as PNG`).hide());
+                .add(this.widget.captureDownload = new apper.widget.Button(`<img src="${getAsset("icons/download.svg")}"> Download as PNG`).hide());
+            
+            this.saveModal = this.app.addModal("Save Graph")
+                .addSeparator()
+                .add(new apper.widget.Paragraph("Save the state of your graph to a file on your device:"))
+                .add(this.widget.saveDownload = new apper.widget.Button(`<img src="${getAsset("icons/download.svg")}"> Download JSON`))
+
+            this.loadModal = this.app.addModal("Load a Graph")
+                .addSeparator()
+                .add(new apper.widget.Paragraph("Import an existing graph from your device by clicking the button below:"))
+                .add(new apper.widget.FileInput(`<img src="${getAsset("icons/upload.svg")}"> Upload JSON`)
+                    .onChange(files => {
+                        this.app.update();
+                        this.loadFromFile(files?.[0]);
+                        this.app.tool = this.app.toolbar.defaultTool;
+                    }))
+                .add(new apper.widget.ButtonList("Example Graphs:", this.exampleURLs, this.exampleTitles)
+                    .onClick(url => {
+                        this.app.update();
+                        this.loadFromURL(url);
+                        this.app.tool = this.app.toolbar.defaultTool;
+                    }));
 
             this.dataPanel = this.app.addPanel("Raw Graph Data")
                 .addSeparator()
@@ -452,40 +475,31 @@ var vertedge = vertedge || (() => {
                         this.app.update();
                     }));
 
-            this.loadModal = this.app.addModal("Load a Graph")
-                .addSeparator()
-                .add(new apper.widget.ButtonList("Example Graphs:", this.exampleURLs, this.exampleTitles)
-                    .onClick(url => {
-                        this.app.update();
-                        this.load(url);
-                        this.app.tool = this.app.toolbar.defaultTool;
-                    }));
-
             this.helpModal = this.app.addModal("Vertedge Help")
                 .addSeparator()
-                .add(new apper.widget.Paragraph("Hi! I'm a former AMR student, so I hope you'll understand that this is still a work in progress."))
+                .add(new apper.widget.Paragraph("Hi! I built this in my spare time a while back, so I hope you'll understand that this is still a bit rough around the edges (pun not intended)."))
                 .add(new apper.widget.Paragraph("If you still need help beyond this page, you can email me at <a href='mailto:seanedwardsclarke@gmail.com' target='_blank' rel='noopener noreferrer'>seanedwardsclarke@gmail.com</a>."))
-                .add(new apper.widget.Paragraph("Please note that the only way to save graphs right now is to save the data using the <b>View Data</b> menu, or an image using the <b>Capture</b> tool. See the section below for more information on how to use these."))
                 .add(new apper.widget.Paragraph("Found a bug or issue? You can report it on <a href='https://github.com/xarkenz/vertedge/issues' target='_blank' rel='noopener noreferrer'>the GitHub page</a> or in an email to the address above. Thanks for your help!"))
                 .addSeparator()
-                .add(new apper.widget.Paragraph("- You can center the view on the graph by pressing the <b>Period</b> key.<br>- Holding <b>Shift</b> while clicking on objects adds them to the current selection.<br>- While dragging in <b>Draw</b> mode to draw an edge, holding the <b>Control</b> key allows you to create a loop."))
+                .add(new apper.widget.Paragraph("- You can center the view on the graph by pressing the <kbd>.</kbd> key.<br>- Holding <kbd>Shift</kbd> while clicking on objects adds them to the current selection.<br>- While dragging in <b>Draw</b> mode to draw an edge, holding the <kbd>Ctrl</kbd> (Windows) / <kbd>⌘ Cmd</kbd> (Mac) key allows you to create a loop."))
                 .addSeparator()
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/select.svg")}/><b>Select</b> (v)<br><br>This is the default tool. Click on vertices and edges to select them, and drag them to move them around. If you drag an edge, it will become a curve which you can adjust to your needs. To select multiple elements at once, drag from empty space to select a region or hold <b>Shift</b> when clicking on elements.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/move.svg")}/><b>Move</b> (m)<br><br>This tool allows you to move the entire view by dragging. This can be especially helpful if you find yourself running out of room on the screen.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/draw.svg")}/><b>Draw</b> (d)<br><br>This tool allows you to create new edges and vertices simply by clicking and dragging. You can even split edges by clicking on them.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/erase.svg")}/><b>Erase</b> (x)<br><br>Use this tool to remove vertices and edges from the graph. You can also use the <b>Delete</b> key to remove the selection in any mode.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/style.svg")}/><b>Style</b> (s)<br><br>This tool allows you to modify the appearance of selected elements through a menu.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/grid.svg")}/><b>Grid</b> (g)<br><br>The grid can be enabled/disabled and tweaked through this menu if you want to make your graph more orderly.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/capture.svg")}/><b>Capture</b><br><br>This tool allows you to download a PNG image of a region of your graph. The background is transparent, so paste wherever you need!`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/data.svg")}/><b>View Data</b><br><br>This menu contains the raw JSON data for the graph. If you want to save your graph, this would be the way to do it: copy the raw data and paste it somewhere else for safekeeping, then paste it back into this menu to load the graph again.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/load.svg")}/><b>Load</b><br><br>This menu contains options for loading graphs. It's a major work in progress, so all it has now is a few examples.`))
-                .add(new apper.widget.Paragraph(`<img style="float:left" src=${getAsset("icons/help.svg")}/><b>Help</b> (h)<br><br>You are here. Congratulations!`));
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/select.svg")}"><b>Select</b> - <kbd>v</kbd><br><br>This is the default tool. Click on vertices and edges to select them, and drag them to move them around. If you drag an edge, it will become a curve which you can adjust to your needs. To select multiple elements at once, drag from empty space to select a region or hold <kbd>Shift</kbd> when clicking on elements.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/move.svg")}"><b>Move</b> - <kbd>m</kbd><br><br>This tool allows you to move the entire view by dragging. This can be especially helpful if you find yourself running out of room on the screen.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/draw.svg")}"><b>Draw</b> - <kbd>d</kbd><br><br>This tool allows you to create new edges and vertices simply by clicking and dragging. You can even split edges by clicking on them.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/erase.svg")}"><b>Erase</b> - <kbd>x</kbd><br><br>Use this tool to remove vertices and edges from the graph. You can also use the <kbd>Delete</kbd> or <kbd>Backspace</kbd> keys to remove the selection in any mode.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/style.svg")}"><b>Style</b> - <kbd>s</kbd><br><br>This tool allows you to modify the appearance of selected elements through a menu.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/grid.svg")}"><b>Grid</b> - <kbd>g</kbd><br><br>The grid can be enabled/disabled and tweaked through this menu if you want to make your graph more orderly.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/capture.svg")}"><b>Capture</b><br><br>This tool allows you to download a PNG image of a region of your graph. The background is transparent, so paste wherever you need!`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/load.svg")}"><b>Load</b> - <kbd>Ctrl</kbd> <kbd>o</kbd><br><br>This menu allows you to load a graph either from a file on your device or from the list of examples.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/save.svg")}"><b>Save</b> - <kbd>Ctrl</kbd> <kbd>s</kbd><br><br>This menu allows you to save the current graph to a file on your device. Unfortunately, cloud saving is not supported. Maybe someday.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/data.svg")}"><b>View Data</b><br><br>This menu contains the raw JSON data for the graph. You can mess around with it if you like, and the graph will update dynamically. Usually, you won't need to use this.`))
+                .add(new apper.widget.Paragraph(`<img style="float:left" src="${getAsset("icons/help.svg")}"><b>Help</b> - <kbd>h</kbd><br><br>You are here. Congratulations!`));
 
             this.app.update();
 
             let graphSourceURL = new URLSearchParams(window.location.search).get("src");
             if (graphSourceURL) {
-                this.load(graphSourceURL);
+                this.loadFromURL(graphSourceURL);
             }
         }
 
@@ -645,15 +659,13 @@ var vertedge = vertedge || (() => {
                     // TODO: users should be able to modify resolution through capture menu
                     this.edges.forEach(edge => {
                         if (!this.widget.captureSelectionOnly.checked || this.selection.includes(edge)) {
-                            return; // continue
+                            edge.draw(this.widget.capturePreview.ctx, false, false, this.color);
                         }
-                        edge.draw(this.widget.capturePreview.ctx, false, false, this.color);
                     });
                     this.vertices.forEach(vertex => {
-                        if (this.widget.captureSelectionOnly.checked && !this.selection.includes(vertex)) {
-                            return; // continue
+                        if (!this.widget.captureSelectionOnly.checked || this.selection.includes(vertex)) {
+                            vertex.draw(this.widget.capturePreview.ctx, false, false, this.color);
                         }
-                        vertex.draw(this.widget.capturePreview.ctx, false, false, this.color);
                     });
 
                     this.widget.captureDownload.url = this.widget.capturePreview.canvas.toDataURL("image/png");
@@ -663,7 +675,28 @@ var vertedge = vertedge || (() => {
                 this.capturePanel.show();
             } else {
                 this.capturePanel.hide();
+                
                 this.captureArea = null;
+                this.widget.captureDownload.url = "";
+                this.widget.captureDownload.filename = "";
+            }
+
+            if (this.app.tool === Tools.LOAD) {
+                this.loadModal.show();
+            } else {
+                this.loadModal.hide();
+            }
+
+            if (this.app.tool === Tools.SAVE) {
+                this.widget.saveDownload.url = `data:application/json;base64,${btoa(this.getGraphData())}`;
+                this.widget.saveDownload.filename = `${this.app.title}.json`;
+
+                this.saveModal.show();
+            } else {
+                this.saveModal.hide();
+
+                this.widget.saveDownload.url = "";
+                this.widget.saveDownload.filename = "";
             }
 
             if (this.app.tool === Tools.DATA) {
@@ -675,12 +708,6 @@ var vertedge = vertedge || (() => {
                 this.dataPanel.show();
             } else {
                 this.dataPanel.hide();
-            }
-
-            if (this.app.tool === Tools.LOAD) {
-                this.loadModal.show();
-            } else {
-                this.loadModal.hide();
             }
 
             if (this.app.tool === Tools.HELP) {
@@ -1265,15 +1292,43 @@ var vertedge = vertedge || (() => {
         handleKeyDown(event) {
             // TODO: better
             switch (event.key.toLowerCase()) {
-                case "v": this.app.tool = Tools.SELECT; return true;
-                case "m": this.app.tool = Tools.MOVE; return true;
-                case "d": this.app.tool = Tools.DRAW; return true;
-                case "x": this.app.tool = Tools.ERASE; return true;
-                case "s": this.app.tool = Tools.STYLE; return true;
-                case "g": this.app.tool = Tools.GRID; return true;
-                case "h": this.app.tool = Tools.HELP; return true;
+                case "v":
+                    this.app.tool = Tools.SELECT;
+                    return true;
+                case "m":
+                    this.app.tool = Tools.MOVE;
+                    return true;
+                case "d":
+                    this.app.tool = Tools.DRAW;
+                    return true;
+                case "x":
+                    this.app.tool = Tools.ERASE;
+                    return true;
+                case "s":
+                    this.app.tool = event.ctrlKey ? Tools.STYLE : Tools.SAVE;
+                    return true;
+                case "g":
+                    this.app.tool = Tools.GRID;
+                    return true;
+                case "o":
+                    if (event.ctrlKey) {
+                        this.app.tool = Tools.LOAD;
+                        return true;
+                    }
+                    return false;
+                case "h":
+                    this.app.tool = Tools.HELP;
+                    return true;
                 case "a":
-                    return event.ctrlKey && (event.shiftKey ? this.deselectAll() : this.selectAll());
+                    if (event.ctrlKey) {
+                        if (event.shiftKey) {
+                            this.deselectAll();
+                        } else {
+                            this.selectAll();
+                        }
+                        return true;
+                    }
+                    return false;
                 case "escape":
                     this.firstVertex = null;
                     this.deselectAll();
@@ -1295,9 +1350,9 @@ var vertedge = vertedge || (() => {
                 case "0":
                     this.app.view.zoom = 1;
                     return true;
+                default:
+                    return false;
             }
-
-            return false;
         }
 
         snapToGrid(pos) {
@@ -1327,14 +1382,10 @@ var vertedge = vertedge || (() => {
 
         selectAll() {
             this.selection = this.vertices.concat(this.edges);
-
-            return true;
         }
 
         deselectAll() {
             this.selection = [];
-
-            return true;
         }
 
         deleteSelection() {
@@ -1374,65 +1425,67 @@ var vertedge = vertedge || (() => {
             if (elements.length === 0) {
                 this.captureArea = null;
             }
-            else {
-                elements = elements.flatMap(element => {
-                    let toCapture = [element];
-                    if (element instanceof Edge) {
-                        if (!elements.includes(element.v1)) {
-                            toCapture.push(element.v1);
-                        }
-                        if (!elements.includes(element.v2)) {
-                            toCapture.push(element.v2);
-                        }
+            elements = elements.flatMap(element => {
+                let toCapture = [element];
+                if (element instanceof Edge) {
+                    if (!elements.includes(element.v1)) {
+                        toCapture.push(element.v1);
                     }
-                    return toCapture;
-                });
+                    if (!elements.includes(element.v2)) {
+                        toCapture.push(element.v2);
+                    }
+                }
+                return toCapture;
+            });
 
-                let minX = Infinity;
-                let maxX = -Infinity;
-                let minY = Infinity;
-                let maxY = -Infinity;
-                elements.forEach(element => {
-                    let margin = element.margin();
-                    if (element instanceof Vertex) {
-                        minX = Math.min(minX, element.x - margin);
-                        maxX = Math.max(maxX, element.x + margin);
-                        minY = Math.min(minY, element.y - margin);
-                        maxY = Math.max(maxY, element.y + margin);
-                    }
-                    else if (element instanceof Edge) {
-                        if (element.isCurve()) {
-                            if (element.cp.x < element.v1.x && element.cp.x < element.v2.x || element.cp.x > element.v1.x && element.cp.x > element.v2.x) {
-                                let vx = quadraticCurveVertexX(element.v1, element.cp, element.v2);
-                                if (vx - margin < minX) minX = vx - margin;
-                                if (vx + margin > maxX) maxX = vx + margin;
-                            }
-                            if (element.cp.y < element.v1.y && element.cp.y < element.v2.y || element.cp.y > element.v1.y && element.cp.y > element.v2.y) {
-                                let vy = quadraticCurveVertexY(element.v1, element.cp, element.v2);
-                                if (vy - margin < minY) minY = vy - margin;
-                                if (vy + margin > maxY) maxY = vy + margin;
-                            }
-                        } else if (element.isLoop()) {
-                            let center = element.cp.add(element.v1).mul(0.5);
-                            let radius = 0.5 * Math.hypot(element.cp.x - element.v1.x, element.cp.y - element.v1.y);
-                            if (center.x - radius - margin < minX) minX = center.x - radius - margin;
-                            if (center.x + radius + margin > maxX) maxX = center.x + radius + margin;
-                            if (center.y - radius - margin < minY) minY = center.y - radius - margin;
-                            if (center.y + radius + margin > maxY) maxY = center.y + radius + margin;
-                        } else {
-                            if (element.v1.x - margin < minX) minX = element.v1.x - margin;
-                            if (element.v1.x + margin > maxX) maxX = element.v1.x + margin;
-                            if (element.v1.y - margin < minY) minY = element.v1.y - margin;
-                            if (element.v1.y + margin > maxY) maxY = element.v1.y + margin;
-                            if (element.v2.x - margin < minX) minX = element.v2.x - margin;
-                            if (element.v2.x + margin > maxX) maxX = element.v2.x + margin;
-                            if (element.v2.y - margin < minY) minY = element.v2.y - margin;
-                            if (element.v2.y + margin > maxY) maxY = element.v2.y + margin;
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minY = Infinity;
+            let maxY = -Infinity;
+            elements.forEach(element => {
+                let margin = element.margin();
+                if (element instanceof Vertex) {
+                    minX = Math.min(minX, element.x - margin);
+                    maxX = Math.max(maxX, element.x + margin);
+                    minY = Math.min(minY, element.y - margin);
+                    maxY = Math.max(maxY, element.y + margin);
+                }
+                else if (element instanceof Edge) {
+                    if (element.isCurve()) {
+                        if (element.cp.x < element.v1.x && element.cp.x < element.v2.x || element.cp.x > element.v1.x && element.cp.x > element.v2.x) {
+                            let vx = quadraticCurveVertexX(element.v1, element.cp, element.v2);
+                            if (vx - margin < minX) minX = vx - margin;
+                            if (vx + margin > maxX) maxX = vx + margin;
                         }
+                        if (element.cp.y < element.v1.y && element.cp.y < element.v2.y || element.cp.y > element.v1.y && element.cp.y > element.v2.y) {
+                            let vy = quadraticCurveVertexY(element.v1, element.cp, element.v2);
+                            if (vy - margin < minY) minY = vy - margin;
+                            if (vy + margin > maxY) maxY = vy + margin;
+                        }
+                    } else if (element.isLoop()) {
+                        let center = element.cp.add(element.v1).mul(0.5);
+                        let radius = 0.5 * Math.hypot(element.cp.x - element.v1.x, element.cp.y - element.v1.y);
+                        if (center.x - radius - margin < minX) minX = center.x - radius - margin;
+                        if (center.x + radius + margin > maxX) maxX = center.x + radius + margin;
+                        if (center.y - radius - margin < minY) minY = center.y - radius - margin;
+                        if (center.y + radius + margin > maxY) maxY = center.y + radius + margin;
+                    } else {
+                        if (element.v1.x - margin < minX) minX = element.v1.x - margin;
+                        if (element.v1.x + margin > maxX) maxX = element.v1.x + margin;
+                        if (element.v1.y - margin < minY) minY = element.v1.y - margin;
+                        if (element.v1.y + margin > maxY) maxY = element.v1.y + margin;
+                        if (element.v2.x - margin < minX) minX = element.v2.x - margin;
+                        if (element.v2.x + margin > maxX) maxX = element.v2.x + margin;
+                        if (element.v2.y - margin < minY) minY = element.v2.y - margin;
+                        if (element.v2.y + margin > maxY) maxY = element.v2.y + margin;
                     }
-                });
-                this.captureArea = new apper.Rect(Math.round(minX), Math.round(minY), Math.round(maxX - minX), Math.round(maxY - minY));
-            }
+                }
+            });
+            minX = Math.round(minX);
+            minY = Math.round(minY);
+            maxX = Math.round(maxX);
+            maxY = Math.round(maxY);
+            this.captureArea = new apper.Rect(minX, minY, maxX - minX, maxY - minY);
         }
 
         getResizeBoxRegion() {
@@ -1472,22 +1525,24 @@ var vertedge = vertedge || (() => {
             return area.contains(this.app.cursorPos) ? BoxRegion.INTERNAL_ALL : BoxRegion.EXTERNAL;
         }
 
-        load(url) {
+        loadFromURL(url) {
             this.app.title = "Loading...";
 
             let fullURL = url.startsWith("examples") ? getAsset(url) : url;
-            console.log(fullURL);
 
             fetch(fullURL)
                 .then(response => response.json(), error => {
                     if (error instanceof TypeError) {
-                        error.message = "The graph URL could not be reached.";
+                        error.message = "The graph URL could not be accessed.";
                     }
                     throw error;
                 })
                 .then(data => {
-                    window.location.hash = url;
+                    let searchParams = new URLSearchParams(window.location.search)
+                    searchParams.set("src", url);
+                    window.history.pushState(null, "", window.location.pathname + "?" + searchParams.toString());
                     this.loadFromData(data, true);
+                    this.app.showMessage("Successfully loaded the graph.", 3);
                 })
                 .catch(error => {
                     if (error instanceof SyntaxError) {
@@ -1500,9 +1555,37 @@ var vertedge = vertedge || (() => {
                 });
         }
 
+        loadFromFile(file) {
+            this.app.title = "Loading...";
+
+            let reader = new FileReader();
+            reader.addEventListener("loadend", () => {
+                if (reader.error) {
+                    this.app.showError("The selected file could not be opened.");
+                    this.app.title = this.app.defaultTitle();
+                    console.error(reader.error);
+                } else {
+                    try {
+                        let data = JSON.parse(reader.result);
+                        this.loadFromData(data, true);
+                        this.app.showMessage("Successfully loaded the graph.", 3);
+                    } catch (error) {
+                        this.app.showError("An error occurred while loading the graph.");
+                        this.app.title = this.app.defaultTitle();
+                        console.error(error);
+                    }
+                }
+            }, { once: true });
+            reader.readAsText(file);
+        }
+
         loadFromData(data, reset = false) {
             this.vertices = data.vertices.map(vertex => new Vertex(vertex));
-            this.edges = data.edges.map(edge => new Edge({...edge, v1: this.vertices[edge.v1], v2: this.vertices[edge.v2]}));
+            this.edges = data.edges.map(edge => new Edge({
+                ...edge,
+                v1: this.vertices[edge.v1],
+                v2: this.vertices[edge.v2],
+            }));
             this.app.title = data.title || this.app.defaultTitle();
 
             if (reset) {

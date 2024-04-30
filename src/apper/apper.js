@@ -1759,6 +1759,56 @@ var apper = apper || (() => {
         }
 
 
+        class FileInput {
+            static toString() { return NAME + ".FileInput"; }
+
+            #element;
+            #label;
+            #input;
+            #files;
+
+            get element() { return this.#element; }
+            get label() { return this.#label.textContent; }
+            set label(text) { return this.#label.textContent = text; }
+            get files() { return this.#files; }
+
+            constructor(label) {
+                this.#element = document.createElement("label");
+                this.#element.className = "apper-file-input";
+                this.#element.addEventListener("change", (event) => {
+                    this.#files = this.#input.files;
+                    this.changeCallback?.(this.#files, event);
+                    this.#input.files = null;
+                }, { passive: true });
+
+                this.#label = document.createElement("span");
+                this.#label.innerHTML = label;
+                this.#element.appendChild(this.#label);
+
+                this.#input = document.createElement("input");
+                this.#input.type = "file";
+                this.#element.appendChild(this.#input);
+
+                this.#files = null;
+            }
+
+            onChange(callback) {
+                this.changeCallback = callback;
+                return this;
+            }
+
+            show() {
+                this.#element.style.display = "";
+                return this;
+            }
+
+            hide() {
+                this.#element.style.display = "none";
+                return this;
+            }
+        }
+
+
         class CanvasImage {
             static toString() { return NAME + ".CanvasImage"; }
 
@@ -1813,6 +1863,7 @@ var apper = apper || (() => {
             TextEditor,
             ButtonList,
             NumberInput,
+            FileInput,
             CanvasImage,
         };
 
