@@ -1496,7 +1496,7 @@ var vertedge = vertedge || (() => {
                 area.x - config.resizeProximityPixels,
                 area.y - config.resizeProximityPixels,
                 area.w + 2 * config.resizeProximityPixels,
-                area.h + 2 * config.resizeProximityPixels
+                area.h + 2 * config.resizeProximityPixels,
             );
 
             const BoxRegion = apper.util.BoxRegion;
@@ -1519,10 +1519,11 @@ var vertedge = vertedge || (() => {
                 if (dn <= config.resizeProximityPixels && dn < ds) {
                     region |= BoxRegion.NEGATIVE_Y;
                 }
-                return region;
+                return region === BoxRegion.NONE ? BoxRegion.INTERNAL_ALL : region;
             }
-
-            return area.contains(this.app.cursorPos) ? BoxRegion.INTERNAL_ALL : BoxRegion.EXTERNAL;
+            else {
+                return BoxRegion.EXTERNAL;
+            }
         }
 
         loadFromURL(url) {
