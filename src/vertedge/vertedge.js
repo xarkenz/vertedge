@@ -176,6 +176,9 @@ var vertedge = vertedge || (() => {
         }
 
         contains(ctx, pos, select, view = null, screen = false) {
+            if (pos == null || Number.isNaN(pos.x) || Number.isNaN(pos.y)) {
+                return false;
+            }
             if (!view) view = new apper.Viewport();
             if (!screen) pos = view.transform(pos);
             ctx.lineWidth = select ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
@@ -279,6 +282,9 @@ var vertedge = vertedge || (() => {
         }
 
         contains(ctx, pos, select, view = null, screen = false) {
+            if (pos == null || Number.isNaN(pos.x) || Number.isNaN(pos.y)) {
+                return false;
+            }
             view ||= new apper.Viewport();
             if (!screen) {
                 pos = view.transform(pos);
@@ -844,7 +850,7 @@ var vertedge = vertedge || (() => {
                 this.app.ctx.lineTo(this.dragState.x + 8, this.dragState.y);
                 this.app.ctx.stroke();
             }
-            else if (this.app.tool === Tools.DRAW && !this.app.cursorPos.equals(0, 0)) {
+            else if (this.app.tool === Tools.DRAW && !this.app.cursorPos.isNaN()) {
                 let pos = gridEnabled ? this.app.transform(this.snapToGrid(this.app.locate(this.app.cursorPos))) : this.app.cursorPos;
                 if (this.firstVertex != null) {
                     this.app.ctx.strokeStyle = `${this.color}aa`;
@@ -878,7 +884,7 @@ var vertedge = vertedge || (() => {
                 this.app.ctx.ellipse(pos.x, pos.y, 5, 5, 0, 0, 2 * Math.PI);
                 this.app.ctx.fill();
             }
-            else if (this.isDragMode() && !this.dragState.elements.length && !this.app.cursorPos.equals(0, 0)) {
+            else if (this.isDragMode() && !this.dragState.elements.length && !this.app.cursorPos.isNaN()) {
                 // Draw selection box
                 this.app.ctx.strokeStyle = `${this.color}77`;
                 this.app.ctx.lineWidth = 2;
@@ -1038,7 +1044,7 @@ var vertedge = vertedge || (() => {
         }
 
         handleMouseMove(event) {
-            if (event.screenPos.equals(0, 0)) {
+            if (event.screenPos.isNaN()) {
                 return false;
             }
             if (!this.isDragMode()) {
@@ -1146,7 +1152,7 @@ var vertedge = vertedge || (() => {
                         } else if (element instanceof Edge && !element.isLoop()) {
                             let pos = this.app.locate(this.app.cursorPos);
                             let v2 = this.splitEdgeAt(element, pos);
-                            this.edges.push(new Edge({v1: this.firstVertex, v2}))
+                            this.edges.push(new Edge({v1: this.firstVertex, v2}));
                         } else {
                             let pos = this.snapToGrid(this.app.locate(this.app.cursorPos));
                             // Prevent creating duplicate vertices in the same position (e.g. when grid snapping is enabled)
@@ -1261,7 +1267,7 @@ var vertedge = vertedge || (() => {
             if (!event.dy) {
                 return false;
             }
-            this.app.view.changeZoom(-event.dy * config.scrollZoomMultiplier, this.app.cursorPos.equals(0, 0) ? null : this.app.cursorPos);
+            this.app.view.changeZoom(-event.dy * config.scrollZoomMultiplier, this.app.cursorPos.isNaN() ? null : this.app.cursorPos);
             return true;
         }
 

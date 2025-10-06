@@ -351,7 +351,7 @@ var apper = apper || (() => {
             this.#updateTitleWidth();
 
             this.#view = new Viewport();
-            this.#cursorPos = new Vector2();
+            this.#cursorPos = new Vector2(NaN);
 
             this.#ctx = this.#canvas.getContext("2d");
 
@@ -359,6 +359,7 @@ var apper = apper || (() => {
             this.#canvas.addEventListener("mousedown", this.#handleMouseDown.bind(this), { passive: false });
             document.addEventListener("mousemove", this.#handleMouseMove.bind(this), { passive: true });
             document.addEventListener("mouseup", this.#handleMouseUp.bind(this), { capture: true, passive: true });
+            this.#canvas.addEventListener("mouseleave", this.#handleMouseLeave.bind(this), { passive: true });
             this.#canvas.addEventListener("touchstart", this.#handleMouseDown.bind(this), { passive: false });
             document.addEventListener("touchmove", this.#handleMouseMove.bind(this), { passive: true });
             document.addEventListener("touchend", this.#handleMouseUp.bind(this), { passive: true });
@@ -627,7 +628,7 @@ var apper = apper || (() => {
 
         #handleMouseMove(event) {
             let isTouch = !!event.touches;
-            let screenPos = new Vector2(
+            let screenPos = event.target !== this.#canvas && event.buttons === 0 ? new Vector2(NaN) : new Vector2(
                 isTouch ? event.touches[0].pageX - this.element.offsetLeft : event.pageX - this.element.offsetLeft,
                 isTouch ? event.touches[0].pageY - this.element.offsetTop : event.pageY - this.element.offsetTop,
             );
@@ -667,6 +668,13 @@ var apper = apper || (() => {
             };
 
             if (this.mouseUpCallback?.(info)) {
+                this.update();
+            }
+        }
+
+        #handleMouseLeave(event) {
+            if (event.buttons === 0) {
+                this.#cursorPos.set(NaN);
                 this.update();
             }
         }
@@ -786,6 +794,14 @@ var apper = apper || (() => {
         normalized() {
             let magnitude = this.magnitude();
             return new Vector2(this.x / magnitude, this.y / magnitude);
+        }
+
+        isNaN() {
+            return Number.isNaN(this.x) || Number.isNaN(this.y);
+        }
+
+        isFinite() {
+            return Number.isFinite(this.x) && Number.isFinite(this.y);
         }
 
         equals(x, y = null) {
