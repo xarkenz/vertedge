@@ -1430,6 +1430,7 @@ var vertedge = vertedge || (() => {
         fitCaptureTo(elements) {
             if (elements.length === 0) {
                 this.captureArea = null;
+                return;
             }
             elements = elements.flatMap(element => {
                 let toCapture = [element];
