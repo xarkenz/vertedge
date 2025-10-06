@@ -961,64 +961,9 @@ var vertedge = vertedge || (() => {
                         }
                     }
                     else if (element instanceof Edge && !element.isLoop()) {
-                        let placed = new Vertex(p);
-                        this.vertices.push(placed);
-                        let other = new Edge({v1: placed, v2: element.v2});
-                        let p0 = new apper.Vector2(element.v1);
-                        let p1 = new apper.Vector2(element.v2);
-                        if (element.isCurve()) {
-                            // Find closest point on curve
-                            let cp = element.cp.copy();
-                            let tNearest = 0;
-                            let minimumDistance = Infinity;
-                            let previousTest = Infinity;
-                            for (let t = 0; t <= 1; t += config.curveSamplingInterval) {
-                                let sample = quadraticCurve(t, p0, cp, p1);
-                                let velocity = quadraticCurveVelocity(t, p0, cp, p1);
-                                let distanceX = sample.x - p.x;
-                                let distanceY = sample.y - p.y;
-                                // Compute a stripped-down version of the derivative of distance which has the same roots
-                                let test = distanceX * velocity.x + distanceY * velocity.y;
-                                // Optimize by only checking endpoints and local minima of distance
-                                if (t === 0 || t === 1 || previousTest <= 0 && test >= 0) {
-                                    let distance = Math.hypot(distanceX, distanceY);
-                                    if (distance < minimumDistance) {
-                                        minimumDistance = distance;
-                                        tNearest = t;
-                                        placed.x = sample.x;
-                                        placed.y = sample.y;
-                                    }
-                                }
-                                previousTest = test;
-                            }
-                            element.cp.set(tNearest * cp.x + (1 - tNearest) * p0.x, tNearest * cp.y + (1 - tNearest) * p0.y);
-                            other.cp = new apper.Vector2(tNearest * p1.x + (1 - tNearest) * cp.x, tNearest * p1.y + (1 - tNearest) * cp.y);
-                        } else {
-                            // Calculate closest point on line segment
-                            let lineVector = p1.sub(p0);
-                            let pointVector = p.sub(p0);
-                            let scalarProjection = pointVector.dot(lineVector) / lineVector.magnitude();
-                            if (scalarProjection <= 0) {
-                                // Closest point is p0
-                                placed.x = p0.x;
-                                placed.y = p0.y;
-                            } else if (scalarProjection >= lineVector.magnitude()) {
-                                // Closest point is p1
-                                placed.x = p1.x;
-                                placed.y = p1.y;
-                            } else {
-                                // Closest point is between p0 and p1
-                                let vectorProjection = lineVector.normalized().mul(scalarProjection);
-                                placed.x = p0.x + vectorProjection.x;
-                                placed.y = p0.y + vectorProjection.y;
-                            }
-                        }
-                        // Split edge at the new vertex
-                        element.v2 = placed;
-                        this.edges.push(other);
-                        element = placed;
+                        element = this.splitEdgeAt(element, event.worldPos);
                         if (this.firstVertex != null) {
-                            this.edges.push(new Edge({v1: this.firstVertex, v2: placed}));
+                            this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
                             this.firstVertex = null;
                         } else {
                             this.firstVertex = element;
@@ -1198,11 +1143,20 @@ var vertedge = vertedge || (() => {
                         if (element instanceof Vertex) {
                             this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
                             this.selection = [element];
+                        } else if (element instanceof Edge && !element.isLoop()) {
+                            let pos = this.app.locate(this.app.cursorPos);
+                            let v2 = this.splitEdgeAt(element, pos);
+                            this.edges.push(new Edge({v1: this.firstVertex, v2}))
                         } else {
-                            let placed = new Vertex(this.snapToGrid(this.app.locate(this.app.cursorPos)));
-                            this.vertices.push(placed);
-                            this.edges.push(new Edge({v1: this.firstVertex, v2: placed}));
-                            this.selection = [placed];
+                            let pos = this.snapToGrid(this.app.locate(this.app.cursorPos));
+                            // Prevent creating duplicate vertices in the same position (e.g. when grid snapping is enabled)
+                            let v2 = this.vertices.findLast(vertex => pos.equals(vertex));
+                            if (!v2) {
+                                v2 = new Vertex(pos);
+                                this.vertices.push(v2);
+                            }
+                            this.edges.push(new Edge({v1: this.firstVertex, v2}));
+                            this.selection = [v2];
                         }
                     }
                 }
@@ -1384,6 +1338,65 @@ var vertedge = vertedge || (() => {
             } else {
                 return new apper.Vector2(pos);
             }
+        }
+
+        splitEdgeAt(edge, cursorPos) {
+            let newVertex = new Vertex(cursorPos);
+            this.vertices.push(newVertex);
+            let other = new Edge({...edge, v1: newVertex, v2: edge.v2});
+            let p0 = new apper.Vector2(edge.v1);
+            let p1 = new apper.Vector2(edge.v2);
+            if (edge.isCurve()) {
+                // Find closest point on curve
+                let cp = edge.cp.copy();
+                let tNearest = 0;
+                let minimumDistance = Infinity;
+                let previousTest = Infinity;
+                for (let t = 0; t <= 1; t += config.curveSamplingInterval) {
+                    let sample = quadraticCurve(t, p0, cp, p1);
+                    let velocity = quadraticCurveVelocity(t, p0, cp, p1);
+                    let distanceX = sample.x - cursorPos.x;
+                    let distanceY = sample.y - cursorPos.y;
+                    // Compute a stripped-down version of the derivative of distance which has the same roots
+                    let test = distanceX * velocity.x + distanceY * velocity.y;
+                    // Optimize by only checking endpoints and local minima of distance
+                    if (t === 0 || t === 1 || previousTest <= 0 && test >= 0) {
+                        let distance = Math.hypot(distanceX, distanceY);
+                        if (distance < minimumDistance) {
+                            minimumDistance = distance;
+                            tNearest = t;
+                            newVertex.x = sample.x;
+                            newVertex.y = sample.y;
+                        }
+                    }
+                    previousTest = test;
+                }
+                edge.cp = new apper.Vector2(tNearest * cp.x + (1 - tNearest) * p0.x, tNearest * cp.y + (1 - tNearest) * p0.y);
+                other.cp = new apper.Vector2(tNearest * p1.x + (1 - tNearest) * cp.x, tNearest * p1.y + (1 - tNearest) * cp.y);
+            } else {
+                // Calculate closest point on line segment
+                let lineVector = p1.sub(p0);
+                let pointVector = cursorPos.sub(p0);
+                let scalarProjection = pointVector.dot(lineVector) / lineVector.magnitude();
+                if (scalarProjection <= 0) {
+                    // Closest point is p0
+                    newVertex.x = p0.x;
+                    newVertex.y = p0.y;
+                } else if (scalarProjection >= lineVector.magnitude()) {
+                    // Closest point is p1
+                    newVertex.x = p1.x;
+                    newVertex.y = p1.y;
+                } else {
+                    // Closest point is between p0 and p1
+                    let vectorProjection = lineVector.normalized().mul(scalarProjection);
+                    newVertex.x = p0.x + vectorProjection.x;
+                    newVertex.y = p0.y + vectorProjection.y;
+                }
+            }
+            // Split edge at the new vertex
+            edge.v2 = newVertex;
+            this.edges.push(other);
+            return newVertex;
         }
 
         elementAt(pos) {
