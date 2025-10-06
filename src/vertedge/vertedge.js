@@ -347,12 +347,28 @@ var vertedge = vertedge || (() => {
             this.exampleURLs = [
                 "examples/complete-4",
                 "examples/complete-5",
-                "examples/complete-3-3"
+                "examples/complete-6",
+                "examples/complete-7",
+                "examples/complete-8",
+                "examples/complete-3-3",
+                "examples/platonic-tetrahedron",
+                "examples/platonic-cube",
+                "examples/platonic-octahedron",
+                "examples/platonic-dodecahedron",
+                "examples/platonic-icosahedron",
             ];
             this.exampleTitles = [
                 "Complete Graph: n = 4",
                 "Complete Graph: n = 5",
-                "Complete Bipartite Graph: m = 3, n = 3"
+                "Complete Graph: n = 6",
+                "Complete Graph: n = 7",
+                "Complete Graph: n = 8",
+                "Complete Bipartite Graph: m = 3, n = 3",
+                "Platonic Solid: Tetrahedron",
+                "Platonic Solid: Cube",
+                "Platonic Solid: Octahedron",
+                "Platonic Solid: Dodecahedron",
+                "Platonic Solid: Icosahedron",
             ];
 
             this.stylePanel = this.app.addPanel("Element Style")
@@ -1536,7 +1552,7 @@ var vertedge = vertedge || (() => {
         loadFromURL(url) {
             this.app.title = "Loading...";
 
-            let fullURL = url.startsWith("examples") ? getAsset(url) : url;
+            let fullURL = url.startsWith("examples") ? getAsset(url + ".json") : url;
 
             fetch(fullURL)
                 .then(response => response.json(), error => {
