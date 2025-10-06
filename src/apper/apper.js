@@ -518,6 +518,7 @@ var apper = apper || (() => {
         }
 
         showMessage(text, seconds = null, error = false) {
+            this.hideMessage();
             this.#message = document.createElement("div");
             this.#message.className = "apper-message";
             if (error) {
@@ -539,11 +540,13 @@ var apper = apper || (() => {
             }
             window.clearTimeout(this.#messageTimeout);
             this.#messageTimeout = null;
-            this.#message.classList.remove("apper-shown");
-            let failsafeTimeout = window.setTimeout(() => this.#message.remove(), config.defaultMessageSeconds * 1000);
-            this.#message.addEventListener("transitionend", () => {
+            let message = this.#message;
+            this.#message = null;
+            message.classList.remove("apper-shown");
+            let failsafeTimeout = window.setTimeout(() => message.remove(), config.defaultMessageSeconds * 1000);
+            message.addEventListener("transitionend", () => {
                 window.clearTimeout(failsafeTimeout);
-                this.#message.remove();
+                message.remove();
             }, { once: true, passive: true });
         }
 
