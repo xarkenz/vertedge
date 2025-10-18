@@ -144,6 +144,7 @@
     box-sizing: border-box;
     flex: 0 0;
     z-index: 3;
+    cursor: pointer;
     transition: background-color 0.25s, border-color 0.25s;
 }
 
@@ -308,6 +309,7 @@
     box-sizing: content-box;
     padding: 10px;
     opacity: 0.5;
+    cursor: pointer;
     transition: opacity 0.25s;
 }
 
@@ -376,11 +378,11 @@
     text-decoration: none;
     font-size: 14px;
     font-family: inherit;
-    cursor: pointer;
     flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: 8px;
+    cursor: pointer;
     transition: background-color 0.25s;
 }
 
@@ -418,6 +420,7 @@
     width: 16px;
     border-radius: 4px;
     background: #fff2;
+    cursor: pointer;
     transition: background-color 0.25s;
     user-select: none;
     -webkit-user-select: none;
@@ -507,6 +510,7 @@
     border: 2px solid transparent;
     box-sizing: border-box;
     flex: 0 0;
+    cursor: pointer;
     transition: background-color 0.25s, border-color 0.25s;
 }
 

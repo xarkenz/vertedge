@@ -38,6 +38,50 @@ var vertedge = vertedge || (() => {
         return (-q.y * q.y + 2 * q.y * r.y - r.y * r.y) / (p.y - 2 * q.y + r.y) + r.y;
     }
 
+    function nearestOnQuadraticCurve(p, q, r, point) {
+        // There's probably a more precise and efficient way of doing this, but this works for now
+        let pointNearest = point;
+        let tNearest = 0;
+        let minimumDistance = Infinity;
+        let previousTest = Infinity;
+        for (let t = 0; t <= 1; t += config.curveSamplingInterval) {
+            let sample = quadraticCurve(t, p, q, r);
+            let velocity = quadraticCurveVelocity(t, p, q, r);
+            let distanceX = sample.x - point.x;
+            let distanceY = sample.y - point.y;
+            // Compute a stripped-down version of the derivative of distance which has the same roots
+            let test = distanceX * velocity.x + distanceY * velocity.y;
+            // Optimize by only checking endpoints and local minima of distance
+            if (t === 0 || t === 1 || previousTest <= 0 && test >= 0) {
+                let distance = Math.hypot(distanceX, distanceY);
+                if (distance < minimumDistance) {
+                    minimumDistance = distance;
+                    tNearest = t;
+                    pointNearest = sample;
+                }
+            }
+            previousTest = test;
+        }
+        return [pointNearest, tNearest];
+    }
+
+    function nearestOnLineSegment(p, q, point) {
+        let lineVector = q.sub(p);
+        let pointVector = point.sub(p);
+        let scalarProjection = pointVector.dot(lineVector) / lineVector.magnitude();
+        if (scalarProjection <= 0) {
+            // Closest point is p
+            return new apper.Vector2(p);
+        } else if (scalarProjection >= lineVector.magnitude()) {
+            // Closest point is q
+            return new apper.Vector2(q);
+        } else {
+            // Closest point is between p and q
+            let vectorProjection = lineVector.normalized().mul(scalarProjection);
+            return vectorProjection.add(p);
+        }
+    }
+
     function orientationOf(p1, p2, p3) {
         return Math.sign((p2.y - p1.y) * (p3.x - p2.x) - (p2.x - p1.x) * (p3.y - p2.y));
     }
@@ -290,6 +334,7 @@ var vertedge = vertedge || (() => {
                 let v2 = view.transform(this.v2);
                 let cp = view.transform(this.cp);
                 if (this.isCurve()) {
+                    // Draw lines to control point
                     ctx.strokeStyle = `${highlight}77`;
                     ctx.lineWidth = 2;
                     ctx.setLineDash([2, 5]);
@@ -300,8 +345,8 @@ var vertedge = vertedge || (() => {
                     ctx.lineTo(cp.x, cp.y);
                     ctx.stroke();
                 }
+                // Draw control point diamond
                 ctx.fillStyle = `${highlight}cc`;
-                ctx.setLineDash([]);
                 ctx.beginPath();
                 ctx.moveTo(cp.x, cp.y + 8);
                 ctx.lineTo(cp.x + 8, cp.y);
@@ -577,7 +622,7 @@ var vertedge = vertedge || (() => {
         }
 
         render() {
-            let element = this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAt(this.app.cursorPos);
+            let element = this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAtCursor();
             this.color = this.app.tool === Tools.DRAW ? Color.GREEN_DARK
                 : this.app.tool === Tools.ERASE ? Color.RED
                 : Color.PURPLE;
@@ -883,38 +928,63 @@ var vertedge = vertedge || (() => {
                 this.app.ctx.stroke();
             }
             else if (this.app.tool === Tools.DRAW && !this.app.cursorPos.isNaN()) {
-                let pos = gridEnabled ? this.app.transform(this.snapToGrid(this.app.locate(this.app.cursorPos))) : this.app.cursorPos;
+                let drawingLoop = this.firstVertex != null && this.app.ctrlKey;
+                let pos = gridEnabled ? this.app.transform(this.snapToGrid(this.app.cursorWorldPos)) : this.app.cursorPos;
+                // Draw vertex preview
+                this.app.ctx.fillStyle = `${this.color}aa`;
+                this.app.ctx.strokeStyle = `${this.color}aa`;
+                this.app.ctx.lineWidth = 2;
+                this.app.ctx.setLineDash([]);
+                if (drawingLoop) {
+                    // Draw diamond at the loop's control point
+                    this.app.ctx.beginPath();
+                    this.app.ctx.moveTo(pos.x, pos.y + 8);
+                    this.app.ctx.lineTo(pos.x + 8, pos.y);
+                    this.app.ctx.lineTo(pos.x, pos.y - 8);
+                    this.app.ctx.lineTo(pos.x - 8, pos.y);
+                    this.app.ctx.closePath();
+                    this.app.ctx.fill();
+                } else if (element instanceof Vertex) {
+                    // Draw dot in the center to indicate that the vertex will be reused
+                    pos = this.app.transform(element);
+                    this.app.ctx.beginPath();
+                    this.app.ctx.ellipse(pos.x, pos.y, 5, 5, 0, 0, 2 * Math.PI);
+                    this.app.ctx.fill();
+                } else if (element instanceof Edge && !element.isLoop()) {
+                    // Draw both dot and outline snapped to the edge to indicate that the edge will be split
+                    let p0 = new apper.Vector2(element.v1);
+                    let p1 = new apper.Vector2(element.v2);
+                    pos = this.app.transform(element.isCurve()
+                        ? nearestOnQuadraticCurve(p0, element.cp, p1, this.app.cursorWorldPos)[0]
+                        : nearestOnLineSegment(p0, p1, this.app.cursorWorldPos));
+                    this.app.ctx.beginPath();
+                    this.app.ctx.ellipse(pos.x, pos.y, 5, 5, 0, 0, 2 * Math.PI);
+                    this.app.ctx.fill();
+                    this.app.ctx.beginPath();
+                    this.app.ctx.ellipse(pos.x, pos.y, 10 * this.app.view.zoom, 10 * this.app.view.zoom, 0, 0, 2 * Math.PI);
+                    this.app.ctx.stroke();
+                } else {
+                    // Draw vertex outline to indicate that a new vertex will be created
+                    this.app.ctx.beginPath();
+                    this.app.ctx.ellipse(pos.x, pos.y, 10 * this.app.view.zoom, 10 * this.app.view.zoom, 0, 0, 2 * Math.PI);
+                    this.app.ctx.stroke();
+                }
+                // Draw edge preview, if applicable
                 if (this.firstVertex != null) {
-                    this.app.ctx.strokeStyle = `${this.color}aa`;
-                    this.app.ctx.lineWidth = 2;
                     this.app.ctx.setLineDash([5, 5]);
                     this.app.ctx.beginPath();
                     let start = this.app.transform(this.firstVertex);
-                    if (this.app.ctrlKey) {
+                    if (drawingLoop) {
                         // Draw loop preview
                         let radius = 0.5 * Math.hypot(pos.x - start.x, pos.y - start.y);
                         this.app.ctx.ellipse(0.5 * (pos.x + start.x), 0.5 * (pos.y + start.y), radius, radius, 0, 0, 2 * Math.PI);
                     } else {
                         // Draw straight edge preview
                         this.app.ctx.moveTo(start.x, start.y);
-                        if (element instanceof Vertex) {
-                            this.app.ctx.lineTo(this.app.transformX(element.x), this.app.transformY(element.y));
-                        } else {
-                            this.app.ctx.lineTo(pos.x, pos.y);
-                        }
+                        this.app.ctx.lineTo(pos.x, pos.y);
                     }
                     this.app.ctx.stroke();
-                    // Draw dot on start vertex
-                    this.app.ctx.fillStyle = `${this.color}aa`;
-                    this.app.ctx.beginPath();
-                    this.app.ctx.ellipse(start.x, start.y, 5, 5, 0, 0, 2 * Math.PI);
-                    this.app.ctx.fill();
                 }
-                // Draw dot under cursor (snapped to grid)
-                this.app.ctx.fillStyle = `${this.color}aa`;
-                this.app.ctx.beginPath();
-                this.app.ctx.ellipse(pos.x, pos.y, 5, 5, 0, 0, 2 * Math.PI);
-                this.app.ctx.fill();
             }
             else if (this.isDragMode() && !this.dragState.elements.length && !this.app.cursorPos.isNaN()) {
                 // Draw selection box
@@ -987,8 +1057,7 @@ var vertedge = vertedge || (() => {
                 }
 
                 let canSelect = event.button !== 2 && this.app.tool !== Tools.MOVE && this.app.tool !== Tools.CAPTURE;
-                let p = this.snapToGrid(event.worldPos);
-                let element = canSelect ? this.elementAt(event.screenPos) : null;
+                let element = canSelect ? this.elementAtCursor() : null;
 
                 if (this.app.tool === Tools.DRAW && event.button === 0) {
                     if (element instanceof Vertex) {
@@ -1008,7 +1077,7 @@ var vertedge = vertedge || (() => {
                         }
                     }
                     else {
-                        let placed = new Vertex(p);
+                        let placed = new Vertex(this.snapToGrid(event.worldPos));
                         this.vertices.push(placed);
                         element = placed;
                         if (this.firstVertex != null && this.firstVertex !== element) {
@@ -1169,7 +1238,13 @@ var vertedge = vertedge || (() => {
                 return false;
             }
 
-            let element = this.dragState.button === 2 || this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAt(this.app.cursorPos);
+            let dx = this.app.cursorPos.x - this.dragState.x;
+            let dy = this.app.cursorPos.y - this.dragState.y;
+            let revertX = Math.abs(dx) <= config.revertProximityPixels;
+            let revertY = Math.abs(dy) <= config.revertProximityPixels;
+            let revert = revertX && revertY;
+
+            let element = this.dragState.button === 2 || this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAtCursor();
 
             if (this.app.tool === Tools.DRAW) {
                 if (this.firstVertex !== null && this.firstVertex !== element) {
@@ -1219,12 +1294,16 @@ var vertedge = vertedge || (() => {
                 if (!event.shiftKey) {
                     this.selection = [];
                 }
-                let selectBox = new apper.Rect(this.dragState.x, this.dragState.y, this.app.cursorPos.x - this.dragState.x, this.app.cursorPos.y - this.dragState.y).located(this.app.view).normalized();
-                if (selectBox.area) {
+                if (!revert) {
+                    let selectBox = new apper.Rect(
+                        this.dragState.x,
+                        this.dragState.y,
+                        this.app.cursorPos.x - this.dragState.x,
+                        this.app.cursorPos.y - this.dragState.y,
+                    ).located(this.app.view).normalized();
                     this.selection.push(
                         ...this.vertices.filter(vertex => {
                             // Check if the selectBox intersects the bounding box of the vertex
-                            // FIXME: doesn't account for vertex shape
                             return selectBox.intersects(new apper.Rect(vertex.x - vertex.r, vertex.y - vertex.r, 2 * vertex.r, 2 * vertex.r));
                         })
                         .concat(this.edges.filter(edge => {
@@ -1232,7 +1311,7 @@ var vertedge = vertedge || (() => {
                             if (selectBox.contains(edge.v1) || selectBox.contains(edge.v2)) {
                                 return true;
                             }
-                            if (edge.isCurve()) {
+                            else if (edge.isCurve()) {
                                 // Check if the selection box intersects the curve
                                 let minX = Math.min(edge.v1.x, edge.cp.x, edge.v2.x);
                                 let maxX = Math.max(edge.v1.x, edge.cp.x, edge.v2.x);
@@ -1387,49 +1466,16 @@ var vertedge = vertedge || (() => {
             if (edge.isCurve()) {
                 // Find closest point on curve
                 let cp = edge.cp.copy();
-                let tNearest = 0;
-                let minimumDistance = Infinity;
-                let previousTest = Infinity;
-                for (let t = 0; t <= 1; t += config.curveSamplingInterval) {
-                    let sample = quadraticCurve(t, p0, cp, p1);
-                    let velocity = quadraticCurveVelocity(t, p0, cp, p1);
-                    let distanceX = sample.x - cursorPos.x;
-                    let distanceY = sample.y - cursorPos.y;
-                    // Compute a stripped-down version of the derivative of distance which has the same roots
-                    let test = distanceX * velocity.x + distanceY * velocity.y;
-                    // Optimize by only checking endpoints and local minima of distance
-                    if (t === 0 || t === 1 || previousTest <= 0 && test >= 0) {
-                        let distance = Math.hypot(distanceX, distanceY);
-                        if (distance < minimumDistance) {
-                            minimumDistance = distance;
-                            tNearest = t;
-                            newVertex.x = sample.x;
-                            newVertex.y = sample.y;
-                        }
-                    }
-                    previousTest = test;
-                }
+                let [pointNearest, tNearest] = nearestOnQuadraticCurve(p0, cp, p1, cursorPos);
+                newVertex.x = pointNearest.x;
+                newVertex.y = pointNearest.y;
                 edge.cp = new apper.Vector2(tNearest * cp.x + (1 - tNearest) * p0.x, tNearest * cp.y + (1 - tNearest) * p0.y);
                 other.cp = new apper.Vector2(tNearest * p1.x + (1 - tNearest) * cp.x, tNearest * p1.y + (1 - tNearest) * cp.y);
             } else {
                 // Calculate closest point on line segment
-                let lineVector = p1.sub(p0);
-                let pointVector = cursorPos.sub(p0);
-                let scalarProjection = pointVector.dot(lineVector) / lineVector.magnitude();
-                if (scalarProjection <= 0) {
-                    // Closest point is p0
-                    newVertex.x = p0.x;
-                    newVertex.y = p0.y;
-                } else if (scalarProjection >= lineVector.magnitude()) {
-                    // Closest point is p1
-                    newVertex.x = p1.x;
-                    newVertex.y = p1.y;
-                } else {
-                    // Closest point is between p0 and p1
-                    let vectorProjection = lineVector.normalized().mul(scalarProjection);
-                    newVertex.x = p0.x + vectorProjection.x;
-                    newVertex.y = p0.y + vectorProjection.y;
-                }
+                let pointNearest = nearestOnLineSegment(p0, p1, cursorPos);
+                newVertex.x = pointNearest.x;
+                newVertex.y = pointNearest.y;
             }
             // Split edge at the new vertex
             edge.v2 = newVertex;
@@ -1437,20 +1483,34 @@ var vertedge = vertedge || (() => {
             return newVertex;
         }
 
-        elementAt(pos) {
+        elementAt(pos, includeEdges = true) {
+            if (pos.isNaN()) {
+                return null;
+            }
+
             for (let i = this.vertices.length - 1; i >= 0; i--) {
                 if (this.vertices[i].contains(this.app.ctx, pos, this.selection.includes(this.vertices[i]), this.app.view, true)) {
                     return this.vertices[i];
                 }
             }
 
-            for (let i = this.edges.length - 1; i >= 0; i--) {
-                if (this.edges[i].contains(this.app.ctx, pos, this.selection.includes(this.edges[i]), this.app.view, true)) {
-                    return this.edges[i];
+            if (includeEdges) {
+                for (let i = this.edges.length - 1; i >= 0; i--) {
+                    if (this.edges[i].contains(this.app.ctx, pos, this.selection.includes(this.edges[i]), this.app.view, true)) {
+                        return this.edges[i];
+                    }
                 }
             }
 
             return null;
+        }
+
+        elementAtCursor() {
+            return this.elementAt(this.app.cursorPos) ?? (
+                this.gridSettings().gridEnabled
+                    ? this.elementAt(this.app.transform(this.snapToGrid(this.app.cursorWorldPos)), false)
+                    : null
+            );
         }
 
         selectAll() {

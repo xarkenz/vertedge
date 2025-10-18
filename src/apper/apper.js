@@ -316,6 +316,7 @@ var apper = apper || (() => {
         #defaultTitle;
         #view;
         #cursorPos;
+        #cursorWorldPos;
         #toolbar = null;
         #panels = [];
         #modals = [];
@@ -360,6 +361,7 @@ var apper = apper || (() => {
 
             this.#view = new Viewport();
             this.#cursorPos = new Vector2(NaN);
+            this.#cursorWorldPos = new Vector2(NaN);
 
             this.#ctx = this.#canvas.getContext("2d");
 
@@ -430,6 +432,10 @@ var apper = apper || (() => {
 
         get cursorPos() {
             return this.#cursorPos.copy();
+        }
+
+        get cursorWorldPos() {
+            return this.#cursorWorldPos.copy();
         }
 
         get toolbar() {
@@ -642,6 +648,7 @@ var apper = apper || (() => {
 
             this.focusCanvas();
             this.#cursorPos.set(screenPos);
+            this.#cursorWorldPos.set(info.worldPos);
 
             if (this.mouseDownCallback?.(info)) {
                 event.preventDefault();
@@ -672,6 +679,7 @@ var apper = apper || (() => {
             };
 
             this.#cursorPos.set(screenPos);
+            this.#cursorWorldPos.set(info.worldPos);
 
             if (this.mouseMoveCallback?.(info)) {
                 this.update();
@@ -700,6 +708,7 @@ var apper = apper || (() => {
         #handleMouseLeave(event) {
             if (event.buttons === 0) {
                 this.#cursorPos.set(NaN);
+                this.#cursorWorldPos.set(NaN);
                 this.update();
             }
         }
@@ -723,6 +732,7 @@ var apper = apper || (() => {
             };
 
             this.#cursorPos.set(screenPos);
+            this.#cursorWorldPos.set(info.worldPos);
 
             if (this.contextMenuCallback?.(info)) {
                 event.preventDefault();
