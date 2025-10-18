@@ -76,12 +76,59 @@ var vertedge = vertedge || (() => {
         HELP: new apper.Tool("help", "Help", getAsset("icons/help.svg"), new apper.Shortcut("h")),
     };
 
-    // TODO: store more information
     const Shape = {
-        CIRCLE: 0,
-        SQUARE: 1,
-        DIAMOND: 2,
+        CIRCLE: Object.freeze({
+            id: 0,
+            sizeFactor: 1,
+            path: function(ctx, pos, radius) {
+                radius *= this.sizeFactor;
+                ctx.ellipse(pos.x, pos.y, radius, radius, 0, 0, 2 * Math.PI);
+            },
+        }),
+        SQUARE: Object.freeze({
+            id: 1,
+            sizeFactor: 1,
+            path: function(ctx, pos, radius) {
+                radius *= this.sizeFactor;
+                ctx.rect(pos.x - radius, pos.y - radius, 2 * radius, 2 * radius);
+            },
+        }),
+        DIAMOND: Object.freeze({
+            id: 2,
+            sizeFactor: 1.3,
+            path: function(ctx, pos, radius) {
+                radius *= this.sizeFactor;
+                ctx.moveTo(pos.x, pos.y - radius);
+                ctx.lineTo(pos.x - radius, pos.y);
+                ctx.lineTo(pos.x, pos.y + radius);
+                ctx.lineTo(pos.x + radius, pos.y);
+                ctx.closePath();
+            },
+        }),
+        STAR: Object.freeze({
+            id: 3,
+            sizeFactor: 1.3,
+            path: function(ctx, pos, radius) {
+                radius *= this.sizeFactor;
+                ctx.moveTo(pos.x, pos.y - radius);
+                ctx.lineTo(pos.x - 0.29 * radius, pos.y - 0.40 * radius);
+                ctx.lineTo(pos.x - 0.95 * radius, pos.y - 0.31 * radius);
+                ctx.lineTo(pos.x - 0.48 * radius, pos.y + 0.15 * radius);
+                ctx.lineTo(pos.x - 0.59 * radius, pos.y + 0.81 * radius);
+                ctx.lineTo(pos.x, pos.y + 0.5 * radius);
+                ctx.lineTo(pos.x + 0.59 * radius, pos.y + 0.81 * radius);
+                ctx.lineTo(pos.x + 0.48 * radius, pos.y + 0.15 * radius);
+                ctx.lineTo(pos.x + 0.95 * radius, pos.y - 0.31 * radius);
+                ctx.lineTo(pos.x + 0.29 * radius, pos.y - 0.40 * radius);
+                ctx.closePath();
+            },
+        }),
     };
+    // Permit access by shape ID
+    for (let shapeName in Shape) {
+        let shape = Shape[shapeName];
+        Shape[shape.id] = shape;
+    }
 
     const Color = {
         NONE: "transparent",
@@ -110,15 +157,14 @@ var vertedge = vertedge || (() => {
 
     class Vertex {
         constructor(data = null) {
-            data ||= {};
-            this.x = data.x ?? 0;
-            this.y = data.y ?? 0;
-            this.r = data.r ?? 10;
-            this.fill = data.fill ?? Color.DARK;
-            this.stroke = data.stroke ?? Color.LIGHT;
-            this.lineWidth = data.lineWidth ?? 4;
-            this.lineDash = (data.lineDash ?? []).slice();
-            this.shape = data.shape ?? Shape.CIRCLE;
+            this.x = data?.x ?? 0;
+            this.y = data?.y ?? 0;
+            this.r = Math.abs(data?.r ?? 10);
+            this.fill = data?.fill ?? Color.DARK;
+            this.stroke = data?.stroke ?? Color.LIGHT;
+            this.lineWidth = data?.lineWidth ?? 4;
+            this.lineDash = (data?.lineDash ?? []).slice();
+            this.shape = data?.shape ?? Shape.CIRCLE;
         }
 
         copy() {
@@ -126,34 +172,18 @@ var vertedge = vertedge || (() => {
         }
 
         margin() {
-            return (this.shape === Shape.DIAMOND ? 1.3 : 1) * this.r + 0.5 * this.lineWidth;
+            return this.shape.sizeFactor * this.r + 0.5 * this.lineWidth;
         }
 
         path(ctx, view = null) {
             view ||= new apper.Viewport();
             this.r = Math.abs(this.r);
-            let pos = view.transform(this);
             ctx.beginPath();
-            switch (this.shape) {
-                case Shape.CIRCLE:
-                default:
-                    ctx.ellipse(pos.x, pos.y, this.r * view.zoom, this.r * view.zoom, 0, 0, 2 * Math.PI);
-                    break;
-                case Shape.SQUARE:
-                    ctx.rect(pos.x - this.r * view.zoom, pos.y - this.r * view.zoom, 2 * this.r * view.zoom, 2 * this.r * view.zoom);
-                    break;
-                case Shape.DIAMOND:
-                    ctx.moveTo(pos.x, pos.y - 1.3 * this.r * view.zoom);
-                    ctx.lineTo(pos.x - 1.3 * this.r * view.zoom, pos.y);
-                    ctx.lineTo(pos.x, pos.y + 1.3 * this.r * view.zoom);
-                    ctx.lineTo(pos.x + 1.3 * this.r * view.zoom, pos.y);
-                    ctx.closePath();
-                    break;
-            }
+            this.shape.path(ctx, view.transform(this), this.r * view.zoom);
         }
 
         draw(ctx, hover, select, highlight, view = null) {
-            if (!view) view = new apper.Viewport();
+            view ||= new apper.Viewport();
             this.r = Math.abs(this.r);
             if (hover || select) {
                 ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
@@ -179,8 +209,10 @@ var vertedge = vertedge || (() => {
             if (pos == null || Number.isNaN(pos.x) || Number.isNaN(pos.y)) {
                 return false;
             }
-            if (!view) view = new apper.Viewport();
-            if (!screen) pos = view.transform(pos);
+            view ||= new apper.Viewport();
+            if (!screen) {
+                pos = view.transform(pos);
+            }
             ctx.lineWidth = select ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
             this.path(ctx, view);
             return ctx.isPointInPath(pos.x * view.scale, pos.y * view.scale) || ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
@@ -190,13 +222,12 @@ var vertedge = vertedge || (() => {
 
     class Edge {
         constructor(data = null) {
-            data ||= {};
-            this.v1 = data.v1;
-            this.v2 = data.v2 ?? data.v1;
-            this.cp = data.cp == null ? null : Array.isArray(data.cp) ? new apper.Vector2(data.cp[0], data.cp[1]) : new apper.Vector2(data.cp);
-            this.stroke = data.stroke ?? Color.DARK;
-            this.lineWidth = data.lineWidth ?? 4;
-            this.lineDash = (data.lineDash ?? []).slice();
+            this.v1 = data?.v1;
+            this.v2 = data?.v2 ?? this.v1;
+            this.cp = data?.cp == null ? null : Array.isArray(data.cp) ? new apper.Vector2(data.cp[0], data.cp[1]) : new apper.Vector2(data.cp);
+            this.stroke = data?.stroke ?? Color.DARK;
+            this.lineWidth = data?.lineWidth ?? 4;
+            this.lineDash = (data?.lineDash ?? []).slice();
         }
 
         copy() {
@@ -348,6 +379,7 @@ var vertedge = vertedge || (() => {
                 getAsset("icons/shape-circle.svg"),
                 getAsset("icons/shape-square.svg"),
                 getAsset("icons/shape-diamond.svg"),
+                getAsset("icons/shape-star.svg"),
             ];
 
             this.exampleURLs = [
@@ -400,7 +432,7 @@ var vertedge = vertedge || (() => {
                     .onChange(value => {
                         this.selection.forEach(element => {
                             if (element instanceof Vertex) {
-                                element.shape = value;
+                                element.shape = Shape[value] ?? Shape.CIRCLE;
                             }
                         });
                         this.app.update();
@@ -588,7 +620,7 @@ var vertedge = vertedge || (() => {
                             }
                         }
                     }
-                    this.widget.vertexShape.value = shape;
+                    this.widget.vertexShape.value = shape.id;
 
                     let radius = null;
                     for (let element of this.selection) {
@@ -1019,7 +1051,7 @@ var vertedge = vertedge || (() => {
                     }
                     orig.stroke = `${this.color}77`;
                     orig.lineWidth = 2;
-                    orig.lineDash = [4, 4];
+                    orig.lineDash = [1, 2];
                     return orig;
                 });
                 let indices = event.shiftKey ? [] : this.selection.map(item => (
@@ -1623,7 +1655,10 @@ var vertedge = vertedge || (() => {
         }
 
         loadFromData(data, reset = false) {
-            this.vertices = data.vertices.map(vertex => new Vertex(vertex));
+            this.vertices = data.vertices.map(vertex => new Vertex({
+                ...vertex,
+                shape: Shape[vertex.shape] ?? Shape.CIRCLE,
+            }));
             this.edges = data.edges.map(edge => new Edge({
                 ...edge,
                 v1: this.vertices[edge.v1],
@@ -1646,7 +1681,7 @@ var vertedge = vertedge || (() => {
                 stroke: vertex.stroke === Color.LIGHT ? undefined : vertex.stroke,
                 lineWidth: vertex.lineWidth === 4 ? undefined : vertex.lineWidth,
                 lineDash: !vertex.lineDash.length ? undefined : vertex.lineDash.slice(),
-                shape: vertex.shape === 0 ? undefined : vertex.shape
+                shape: vertex.shape.id === 0 ? undefined : vertex.shape.id,
             }));
 
             let edges = this.edges.map(edge => ({

@@ -284,6 +284,12 @@ var apper = apper || (() => {
             return ctx.measureText(text);
         }
 
+        function beforeUnloadHandler(event) {
+            // Show the built-in "changes you made may not be saved" dialog
+            event.preventDefault();
+            event.returnValue = true; // Legacy support
+        };
+
 
         return {
             toString() { return NAME; },
@@ -294,6 +300,7 @@ var apper = apper || (() => {
             BoxRegion,
             getResizeCursor,
             getTextMetrics,
+            beforeUnloadHandler,
         };
 
     })(NAME);
@@ -317,6 +324,7 @@ var apper = apper || (() => {
         #altKey = false;
         #ctrlKey = false;
         #shiftKey = false;
+        #hasUnsavedChanges = false;
 
         constructor(element) {
             this.#element = element;
@@ -446,6 +454,20 @@ var apper = apper || (() => {
 
         get shiftKey() {
             return this.#shiftKey;
+        }
+
+        get hasUnsavedChanges() {
+            return this.#hasUnsavedChanges;
+        }
+
+        set hasUnsavedChanges(unsaved) {
+            unsaved = !!unsaved;
+            if (unsaved) {
+                window.addEventListener("beforeunload", util.beforeUnloadHandler);
+            } else {
+                window.removeEventListener("beforeunload", util.beforeUnloadHandler);
+            }
+            return this.#hasUnsavedChanges = unsaved;
         }
 
         onUpdate(callback) {
