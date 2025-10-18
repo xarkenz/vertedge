@@ -365,7 +365,7 @@ var vertedge = vertedge || (() => {
             if (!screen) {
                 pos = view.transform(pos);
             }
-            if (this.isCurveOrLoop()) {
+            if (select && this.isCurveOrLoop()) {
                 let cp = view.transform(this.cp);
                 ctx.beginPath();
                 ctx.ellipse(cp.x, cp.y, 10, 10, 0, 0, 2 * Math.PI);
