@@ -384,6 +384,8 @@
     gap: 8px;
     cursor: pointer;
     transition: background-color 0.25s;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .apper-button:hover {
@@ -591,6 +593,8 @@
     font-family: inherit;
     cursor: pointer;
     transition: background-color 0.25s;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .apper-button-list > div > button:first-child {

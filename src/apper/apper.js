@@ -827,12 +827,11 @@ var apper = apper || (() => {
         }
 
         normalized() {
-            let magnitude = this.magnitude();
-            return new Vector2(this.x / magnitude, this.y / magnitude);
+            return this.div(this.magnitude());
         }
 
         isNaN() {
-            return Number.isNaN(this.x) || Number.isNaN(this.y);
+            return isNaN(this.x) || isNaN(this.y);
         }
 
         isFinite() {
@@ -847,6 +846,10 @@ var apper = apper || (() => {
                 y = x;
             }
             return this.x === x && this.y === y;
+        }
+
+        neg() {
+            return new Vector2(-this.x, -this.y);
         }
 
         add(x, y = null) {
@@ -894,6 +897,14 @@ var apper = apper || (() => {
                 return this.x * x.x + this.y * x.y;
             }
             return this.x * x + this.y * y;
+        }
+
+        rotated90CCW() {
+            return new Vector2(-this.y, this.x);
+        }
+
+        rotated90CW() {
+            return new Vector2(this.y, -this.x);
         }
 
         transformed(view) {

@@ -206,7 +206,7 @@ var vertedge = vertedge || (() => {
             this.r = Math.abs(data?.r ?? 10);
             this.fill = data?.fill ?? Color.DARK;
             this.stroke = data?.stroke ?? Color.LIGHT;
-            this.lineWidth = data?.lineWidth ?? 4;
+            this.lineWidth = Math.abs(data?.lineWidth ?? 4);
             this.lineDash = (data?.lineDash ?? []).slice();
             this.shape = data?.shape ?? Shape.CIRCLE;
         }
@@ -220,19 +220,19 @@ var vertedge = vertedge || (() => {
         }
 
         path(ctx, view = null) {
-            view ||= new apper.Viewport();
+            view ??= new apper.Viewport();
             this.r = Math.abs(this.r);
-            ctx.beginPath();
             this.shape.path(ctx, view.transform(this), this.r * view.zoom);
         }
 
         draw(ctx, hover, select, highlight, view = null) {
-            view ||= new apper.Viewport();
+            view ??= new apper.Viewport();
             this.r = Math.abs(this.r);
             if (hover || select) {
                 ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
                 ctx.lineWidth = this.lineWidth * view.zoom + 4;
                 ctx.setLineDash([]);
+                ctx.beginPath();
                 this.path(ctx, view);
                 ctx.stroke();
             }
@@ -240,6 +240,7 @@ var vertedge = vertedge || (() => {
             ctx.strokeStyle = this.stroke;
             ctx.lineWidth = this.lineWidth * view.zoom;
             ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth * view.zoom));
+            ctx.beginPath();
             this.path(ctx, view);
             if (this.r > 0) {
                 ctx.fill();
@@ -250,14 +251,15 @@ var vertedge = vertedge || (() => {
         }
 
         contains(ctx, pos, select, view = null, screen = false) {
-            if (pos == null || Number.isNaN(pos.x) || Number.isNaN(pos.y)) {
+            if (pos == null || isNaN(pos.x) || isNaN(pos.y)) {
                 return false;
             }
-            view ||= new apper.Viewport();
+            view ??= new apper.Viewport();
             if (!screen) {
                 pos = view.transform(pos);
             }
             ctx.lineWidth = select ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
+            ctx.beginPath();
             this.path(ctx, view);
             return ctx.isPointInPath(pos.x * view.scale, pos.y * view.scale) || ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
         }
@@ -270,8 +272,11 @@ var vertedge = vertedge || (() => {
             this.v2 = data?.v2 ?? this.v1;
             this.cp = data?.cp == null ? null : Array.isArray(data.cp) ? new apper.Vector2(data.cp[0], data.cp[1]) : new apper.Vector2(data.cp);
             this.stroke = data?.stroke ?? Color.DARK;
-            this.lineWidth = data?.lineWidth ?? 4;
+            this.lineWidth = Math.abs(data?.lineWidth ?? 4);
             this.lineDash = (data?.lineDash ?? []).slice();
+            this.directed = !!data?.directed;
+            this.arrowAngle = data?.arrowAngle ?? 30;
+            this.arrowLength = data?.arrowLength ?? 20;
         }
 
         copy() {
@@ -294,9 +299,12 @@ var vertedge = vertedge || (() => {
             return this.isCurveOrLoop() && this.v1 === this.v2;
         }
 
+        reverse() {
+            [this.v1, this.v2] = [this.v2, this.v1];
+        }
+
         path(ctx, view = null) {
-            view ||= new apper.Viewport();
-            ctx.beginPath();
+            view ??= new apper.Viewport();
             let v1 = view.transform(this.v1);
             let v2 = view.transform(this.v2);
             if (this.isCurve()) {
@@ -313,21 +321,75 @@ var vertedge = vertedge || (() => {
             }
         }
 
+        pathArrow(ctx, view = null) {
+            view ??= new apper.Viewport();
+            let v1 = view.transform(this.v1);
+            let v2 = view.transform(this.v2);
+            let margin = this.v2.margin();
+            let len = this.arrowLength * view.zoom;
+            let radians = this.arrowAngle * (Math.PI / 180);
+            let cos = Math.cos(radians);
+            let sin = Math.sin(radians);
+            let dir;
+            if (this.isCurve()) {
+                let cp = view.transform(this.cp);
+                dir = cp.sub(v2);
+                // In most cases, it looks fine to just shift the arrow along
+                // the tangent line.
+            } else if (this.isLoop()) {
+                let cp = view.transform(this.cp);
+                // Shifting the arrow along the tangent line looks really bad
+                // here, so we should do some extra calculation.
+                // To try and ensure the arrow looks good, we can fudge it a
+                // little by increasing our margin by half of the arrow length.
+                // Not perfect, but it's usually good enough.
+                let sampleDist = margin + cos * len * 0.5;
+                let offset = cp.sub(v2);
+                let distSquared = offset.x * offset.x + offset.y * offset.y;
+                let discriminant = distSquared - sampleDist * sampleDist;
+                if (discriminant < 0) {
+                    // The arrow doesn't really have space to be drawn, so just
+                    // omit it; direction isn't critical for a loop anyway.
+                    return;
+                }
+                dir = offset.mul(sampleDist).add(offset.rotated90CCW().mul(Math.sqrt(discriminant)));
+            } else {
+                dir = v1.sub(v2);
+            }
+            dir = dir.normalized();
+            let tip = v2.add(dir.mul(margin));
+            ctx.moveTo(tip.x, tip.y);
+            ctx.lineTo(tip.x + len * (dir.x * cos - dir.y * sin), tip.y + len * (dir.y * cos + dir.x * sin));
+            ctx.moveTo(tip.x, tip.y);
+            ctx.lineTo(tip.x + len * (dir.x * cos + dir.y * sin), tip.y + len * (dir.y * cos - dir.x * sin));
+        }
+
         draw(ctx, hover, select, highlight, view = null) {
-            view ||= new apper.Viewport();
+            view ??= new apper.Viewport();
             if (hover || select) {
                 ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
                 ctx.lineWidth = this.lineWidth * view.zoom + 4;
                 ctx.setLineDash([]);
+                ctx.beginPath();
                 this.path(ctx, view);
+                if (this.directed) {
+                    this.pathArrow(ctx, view);
+                }
                 ctx.stroke();
             }
             ctx.strokeStyle = this.stroke;
             ctx.lineWidth = this.lineWidth * view.zoom;
-            ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth * view.zoom));
-            this.path(ctx, view);
             if (this.lineWidth > 0) {
+                ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth * view.zoom));
+                ctx.beginPath();
+                this.path(ctx, view);
                 ctx.stroke();
+                if (this.directed) {
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    this.pathArrow(ctx, view);
+                    ctx.stroke();
+                }
             }
             if (select && this.isCurveOrLoop()) {
                 let v1 = view.transform(this.v1);
@@ -358,10 +420,10 @@ var vertedge = vertedge || (() => {
         }
 
         contains(ctx, pos, select, view = null, screen = false) {
-            if (pos == null || Number.isNaN(pos.x) || Number.isNaN(pos.y)) {
+            if (pos == null || isNaN(pos.x) || isNaN(pos.y)) {
                 return false;
             }
-            view ||= new apper.Viewport();
+            view ??= new apper.Viewport();
             if (!screen) {
                 pos = view.transform(pos);
             }
@@ -374,7 +436,11 @@ var vertedge = vertedge || (() => {
                 }
             }
             ctx.lineWidth = select ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
+            ctx.beginPath();
             this.path(ctx, view);
+            if (this.directed) {
+                this.pathArrow(ctx, view);
+            }
             return ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
         }
     }
@@ -502,6 +568,43 @@ var vertedge = vertedge || (() => {
                     .onChange(value => {
                         this.selection.forEach(element => {
                             element.lineDash = value ? config.defaultLineDash : [];
+                        });
+                        this.app.update();
+                    }))
+                .addSeparator()
+                .add(this.widget.edgeDirected = new apper.widget.Checkbox("vertedge-edge-directed", "Directed edge")
+                    .onChange(value => {
+                        this.selection.forEach(element => {
+                            if (element instanceof Edge) {
+                                element.directed = value;
+                            }
+                        });
+                        this.app.update();
+                    }))
+                .add(this.widget.reverseEdge = new apper.widget.Button("Reverse Edge Direction")
+                    .onClick(() => {
+                        this.selection.forEach(element => {
+                            if (element instanceof Edge) {
+                                element.reverse();
+                            }
+                        });
+                        this.app.update();
+                    }))
+                .add(this.widget.arrowAngle = new apper.widget.NumberInput("vertedge-arrow-angle", "Arrow angle (degrees):").setMin(0).setMax(90)
+                    .onChange(value => {
+                        this.selection.forEach(element => {
+                            if (element instanceof Edge) {
+                                element.arrowAngle = value;
+                            }
+                        });
+                        this.app.update();
+                    }))
+                .add(this.widget.arrowLength = new apper.widget.NumberInput("vertedge-arrow-length", "Arrow length:").setMin(0)
+                    .onChange(value => {
+                        this.selection.forEach(element => {
+                            if (element instanceof Edge) {
+                                element.arrowLength = value;
+                            }
                         });
                         this.app.update();
                     }));
@@ -634,9 +737,9 @@ var vertedge = vertedge || (() => {
 
             if (this.app.tool === Tools.STYLE && this.selection.length) {
                 if (this.selection.some(element => element instanceof Vertex)) {
-                    this.widget.fillColor.element.style.display = "";
-                    this.widget.vertexShape.element.style.display = "";
-                    this.widget.vertexRadius.element.style.display = "";
+                    this.widget.fillColor.show();
+                    this.widget.vertexShape.show();
+                    this.widget.vertexRadius.show();
 
                     let fillColor = null;
                     for (let element of this.selection) {
@@ -678,11 +781,51 @@ var vertedge = vertedge || (() => {
                             }
                         }
                     }
-                    this.widget.vertexRadius.value = radius ?? 10;
+                    this.widget.vertexRadius.value = radius ?? new Vertex().r;
                 } else {
-                    this.widget.fillColor.element.style.display = "none";
-                    this.widget.vertexShape.element.style.display = "none";
-                    this.widget.vertexRadius.element.style.display = "none";
+                    this.widget.fillColor.hide();
+                    this.widget.vertexShape.hide();
+                    this.widget.vertexRadius.hide();
+                }
+
+                if (this.selection.some(element => element instanceof Edge)) {
+                    this.widget.edgeDirected.show();
+                    this.widget.reverseEdge.show();
+                    this.widget.arrowAngle.show();
+                    this.widget.arrowLength.show();
+
+                    this.widget.edgeDirected.checked = this.selection.some(element => element instanceof Edge && element.directed)
+
+                    let arrowAngle = null;
+                    for (let element of this.selection) {
+                        if (element instanceof Edge) {
+                            if (arrowAngle === null) {
+                                arrowAngle = element.arrowAngle;
+                            } else if (element.arrowAngle !== arrowAngle) {
+                                arrowAngle = null;
+                                break;
+                            }
+                        }
+                    }
+                    this.widget.arrowAngle.value = arrowAngle ?? new Edge().arrowAngle;
+
+                    let arrowLength = null;
+                    for (let element of this.selection) {
+                        if (element instanceof Edge) {
+                            if (arrowLength === null) {
+                                arrowLength = element.arrowLength;
+                            } else if (element.arrowLength !== arrowLength) {
+                                arrowLength = null;
+                                break;
+                            }
+                        }
+                    }
+                    this.widget.arrowLength.value = arrowLength ?? new Edge().arrowLength;
+                } else {
+                    this.widget.edgeDirected.hide();
+                    this.widget.reverseEdge.hide();
+                    this.widget.arrowAngle.hide();
+                    this.widget.arrowLength.hide();
                 }
 
                 let lineColor = null;
@@ -1734,22 +1877,27 @@ var vertedge = vertedge || (() => {
         }
 
         getGraphData() {
+            let vertexDefault = new Vertex();
             let vertices = this.vertices.map(vertex => ({
                 x: vertex.x, y: vertex.y,
-                r: vertex.r === 10 ? undefined : vertex.r,
-                fill: vertex.fill === Color.DARK ? undefined : vertex.fill,
-                stroke: vertex.stroke === Color.LIGHT ? undefined : vertex.stroke,
-                lineWidth: vertex.lineWidth === 4 ? undefined : vertex.lineWidth,
+                r: vertex.r === vertexDefault.r ? undefined : vertex.r,
+                fill: vertex.fill === vertexDefault.fill ? undefined : vertex.fill,
+                stroke: vertex.stroke === vertexDefault.stroke ? undefined : vertex.stroke,
+                lineWidth: vertex.lineWidth === vertexDefault.lineWidth ? undefined : vertex.lineWidth,
                 lineDash: !vertex.lineDash.length ? undefined : vertex.lineDash.slice(),
                 shape: vertex.shape.id === 0 ? undefined : vertex.shape.id,
             }));
 
+            let edgeDefault = new Edge();
             let edges = this.edges.map(edge => ({
                 v1: this.vertices.indexOf(edge.v1), v2: this.vertices.indexOf(edge.v2),
                 cp: edge.cp === null ? undefined : [edge.cp.x, edge.cp.y],
-                stroke: edge.stroke === Color.DARK ? undefined : edge.stroke,
-                lineWidth: edge.lineWidth === 4 ? undefined : edge.lineWidth,
+                stroke: edge.stroke === edgeDefault.stroke ? undefined : edge.stroke,
+                lineWidth: edge.lineWidth === edgeDefault.lineWidth ? undefined : edge.lineWidth,
                 lineDash: !edge.lineDash.length ? undefined : edge.lineDash.slice(),
+                directed: !edge.directed ? undefined : edge.directed,
+                arrowAngle: edge.arrowAngle === edgeDefault.arrowAngle ? undefined : edge.arrowAngle,
+                arrowLength: edge.arrowLength === edgeDefault.arrowLength ? undefined : edge.arrowLength,
             }));
 
             return JSON.stringify({title: this.app.title, vertices, edges});
