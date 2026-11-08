@@ -1541,7 +1541,7 @@ var vertedge = vertedge || (() => {
                     this.app.tool = Tools.ERASE;
                     return true;
                 case "s":
-                    this.app.tool = event.ctrlKey ? Tools.STYLE : Tools.SAVE;
+                    this.app.tool = event.ctrlKey ? Tools.SAVE : Tools.STYLE;
                     return true;
                 case "g":
                     this.app.tool = Tools.GRID;
