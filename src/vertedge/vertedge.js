@@ -325,7 +325,7 @@ var vertedge = vertedge || (() => {
             view ??= new apper.Viewport();
             let v1 = view.transform(this.v1);
             let v2 = view.transform(this.v2);
-            let margin = this.v2.margin();
+            let margin = this.v2.margin() * view.zoom;
             let len = this.arrowLength * view.zoom;
             let radians = this.arrowAngle * (Math.PI / 180);
             let cos = Math.cos(radians);
