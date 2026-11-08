@@ -768,7 +768,7 @@ var vertedge = vertedge || (() => {
                             }
                         }
                     }
-                    this.widget.vertexShape.value = shape.id;
+                    this.widget.vertexShape.value = shape?.id;
 
                     let radius = null;
                     for (let element of this.selection) {
