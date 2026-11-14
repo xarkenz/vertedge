@@ -325,13 +325,12 @@ export class GraphicalEditor {
     showMessage(text: string, seconds: number | undefined = undefined, error: boolean = false): void {
         this.hideMessage();
         this.#message = document.createElement("div");
-        this.#message.className = "apper-message";
+        this.#message.className = "apper-message apper-shown";
         if (error) {
             this.#message.classList.add("apper-error");
         }
         this.#message.textContent = text;
         this.#element.appendChild(this.#message);
-        window.setTimeout(() => this.#message?.classList?.add("apper-shown"));
         this.#messageTimeout = window.setTimeout(() => this.hideMessage(), (seconds ?? config.defaultMessageSeconds) * 1000);
     }
 

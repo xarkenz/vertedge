@@ -104,6 +104,11 @@
 .apper-message.apper-shown {
     transform: translate(-50%, -48px);
     opacity: 1;
+
+    @starting-style {
+        transform: translate(-50%, 0);
+        opacity: 0;
+    }
 }
 
 
