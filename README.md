@@ -1,6 +1,6 @@
 # Vertedge
 
-![Screenshot of a graph in Vertedge](./assets/vertedge/images/vertedge-screenshot.png)
+![Screenshot of a graph in Vertedge](public/images/vertedge-screenshot.png)
 
 A [client-side web application](https://xarkenz.github.io/vertedge/) for experimenting with and visually demonstrating graph theory through an intuitive interface.
 

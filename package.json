@@ -1,0 +1,22 @@
+{
+  "name": "vertedge",
+  "version": "1.0.0",
+  "description": "A client-side web application for experimenting with and visually demonstrating graph theory through an intuitive interface.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "xarkenz",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

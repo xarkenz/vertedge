@@ -1,0 +1,13 @@
+[
+    { "url": "examples/complete-4", "title": "Complete Graph: n = 4" },
+    { "url": "examples/complete-5", "title": "Complete Graph: n = 5" },
+    { "url": "examples/complete-6", "title": "Complete Graph: n = 6" },
+    { "url": "examples/complete-7", "title": "Complete Graph: n = 7" },
+    { "url": "examples/complete-8", "title": "Complete Graph: n = 8" },
+    { "url": "examples/complete-3-3", "title": "Complete Bipartite Graph: m = 3, n = 3" },
+    { "url": "examples/platonic-tetrahedron", "title": "Platonic Solid: Tetrahedron" },
+    { "url": "examples/platonic-cube", "title": "Platonic Solid: Cube" },
+    { "url": "examples/platonic-octahedron", "title": "Platonic Solid: Octahedron" },
+    { "url": "examples/platonic-dodecahedron", "title": "Platonic Solid: Dodecahedron" },
+    { "url": "examples/platonic-icosahedron", "title": "Platonic Solid: Icosahedron" }
+]
