@@ -451,7 +451,11 @@ export class GraphicalEditor {
             screenPos = new Vector2(touch.pageX, touch.pageY);
             buttons = 1;
         } else {
-            screenPos = new Vector2(event.pageX, event.pageY);
+            // Don't report cursor position if hovering over something other
+            // than the canvas.
+            screenPos = event.target !== this.#canvas && event.buttons === 0
+                ? new Vector2(NaN)
+                : new Vector2(event.pageX, event.pageY);
             buttons = event.buttons;
         }
         screenPos = screenPos.sub(this.element.offsetLeft, this.element.offsetTop);
