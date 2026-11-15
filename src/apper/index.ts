@@ -435,6 +435,7 @@ export class GraphicalEditor {
             if (activePointers.length === 1) {
                 let pointer = activePointers[0]!;
                 this.#currentGesture = dragGesture(pointer);
+                this.#hoverPos = new Vector2(pointer);
                 if (this.dragStartCallback?.(pointer)) {
                     this.redraw();
                 }
