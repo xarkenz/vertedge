@@ -113,6 +113,17 @@ export class Vector2 {
     located(view: Viewport): Vector2 {
         return view.locate(this);
     }
+
+    static midpoint(a: Vector2Like, b: Vector2Like): Vector2 {
+        return new Vector2(
+            (a.x + b.x) / 2,
+            (a.y + b.y) / 2,
+        );
+    }
+
+    static distance(a: Vector2Like, b: Vector2Like): number {
+        return Math.hypot(b.x - a.x, b.y - a.y);
+    }
 }
 
 

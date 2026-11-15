@@ -36,8 +36,8 @@ let dummyCanvas: HTMLCanvasElement | null = null;
 export function getTextMetrics(text: string, source: Element | string): TextMetrics {
     dummyCanvas ||= document.createElement("canvas");
     let ctx = dummyCanvas.getContext("2d");
-    if (ctx === null) {
-        throw new Error("2d rendering context not supported.");
+    if (!ctx) {
+        throw new Error("2d rendering context not supported!");
     }
 
     if (source instanceof Element) {

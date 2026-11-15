@@ -43,6 +43,7 @@
     height: 100%;
     z-index: 0;
     animation: 1s apper-fade-in;
+    touch-action: none;
 }
 
 

@@ -8,6 +8,8 @@ import { beforeUnloadHandler, getTextMetrics } from "./util";
 
 export const config = {
     defaultMessageSeconds: 10,
+    scrollZoomMultiplier: 0.0005,
+    minPinchDistance: 4,
 };
 
 export interface ApperWidget {
@@ -16,7 +18,7 @@ export interface ApperWidget {
 
 export interface ApperApplication extends ApperWidget {
     toolbar: Toolbar | null;
-    update(): void;
+    redraw(): void;
     focusCanvas(): void;
 }
 
@@ -25,51 +27,75 @@ export interface ApperResizeEvent {
     height: number;
 }
 
-export interface ApperInputEvent {
+export interface ApperDragEvent {
+    x: number;
+    y: number;
+    button: number;
+}
+
+export interface ApperWheelEvent {
+    dx: number;
+    dy: number;
+}
+
+export interface ApperKeyEvent {
+    key: string;
+}
+
+interface ModifierKeys {
     altKey: boolean;
     ctrlKey: boolean;
+    metaKey: boolean;
     shiftKey: boolean;
 }
 
-export interface ApperMouseEvent extends ApperInputEvent {
-    leftBtn: boolean;
-    rightBtn: boolean;
-    middleBtn: boolean;
-}
-
-export interface ApperMouseDownEvent extends ApperMouseEvent {
-    isTouch: boolean;
-    screenPos: Vector2;
-    worldPos: Vector2;
+interface PointerState {
+    id: number;
+    x: number;
+    y: number;
     button: number;
 }
 
-export interface ApperMouseMoveEvent extends ApperMouseEvent {
-    isTouch: boolean;
-    onCanvas: boolean;
-    screenPos: Vector2;
-    worldPos: Vector2;
-}
+type Gesture = {
+    type: "reset", // All input ignored until no more active pointers left.
+} | {
+    type: "none", // No active pointers, hovering is tracked.
+} | {
+    type: "drag", // One active pointer currently dragging.
+    id: number,
+    startState: Omit<PointerState, "id">,
+} | {
+    type: "view", // Two active pointers panning/zooming the viewport.
+    id1: number,
+    id2: number,
+    startView: Viewport,
+    startMidpoint: Vector2,
+    startDistance: number,
+};
 
-export interface ApperMouseUpEvent extends ApperMouseEvent {
-    isTouch: boolean;
-    button: number;
-}
-
-export interface ApperContextMenuEvent extends ApperMouseEvent {
-    screenPos: Vector2;
-    worldPos: Vector2;
-    button: number;
-}
-
-export interface ApperWheelEvent extends ApperInputEvent {
-    dx: number,
-    dy: number,
-}
-
-export interface ApperKeyEvent extends ApperInputEvent {
-    key: string;
-}
+const resetGesture = () => ({
+    type: "reset" as const,
+});
+const noneGesture = () => ({
+    type: "none" as const,
+});
+const dragGesture = (pointer: PointerState) => ({
+    type: "drag" as const,
+    id: pointer.id,
+    startState: {
+        x: pointer.x,
+        y: pointer.y,
+        button: pointer.button,
+    },
+});
+const viewGesture = (pointer1: PointerState, pointer2: PointerState, view: Viewport) => ({
+    type: "view" as const,
+    id1: pointer1.id,
+    id2: pointer2.id,
+    startView: view.copy(),
+    startMidpoint: Vector2.midpoint(pointer1, pointer2),
+    startDistance: Math.max(config.minPinchDistance, Vector2.distance(pointer1, pointer2)) * view.zoom,
+});
 
 export class GraphicalEditor {
     #element: HTMLElement;
@@ -77,9 +103,10 @@ export class GraphicalEditor {
     #ctx: CanvasRenderingContext2D;
     #title: HTMLInputElement;
     #defaultTitle: string;
-    #view: Viewport;
-    #cursorPos: Vector2;
-    #cursorWorldPos: Vector2;
+    #view: Viewport = new Viewport();
+    #activePointers: Map<number, PointerState> = new Map();
+    #currentGesture: Gesture = noneGesture();
+    #hoverPos: Vector2 | null = null;
     #toolbar: Toolbar | null = null;
     #panels: Panel[] = [];
     #modals: Modal[] = [];
@@ -90,12 +117,13 @@ export class GraphicalEditor {
     #shiftKey: boolean = false;
     #hasUnsavedChanges: boolean = false;
 
-    updateCallback?: () => void;
+    redrawCallback?: () => void;
     resizeCallback?: (event: ApperResizeEvent) => void;
-    mouseDownCallback?: (event: ApperMouseDownEvent) => boolean;
-    mouseMoveCallback?: (event: ApperMouseMoveEvent) => boolean;
-    mouseUpCallback?: (event: ApperMouseUpEvent) => boolean;
-    contextMenuCallback?: (event: ApperContextMenuEvent) => boolean;
+    hoverMoveCallback?: () => boolean;
+    dragStartCallback?: (event: ApperDragEvent) => boolean;
+    dragMoveCallback?: (event: ApperDragEvent) => boolean;
+    dragFinishCallback?: (event: ApperDragEvent) => boolean;
+    dragCancelCallback?: (event: ApperDragEvent) => boolean;
     wheelCallback?: (event: ApperWheelEvent) => boolean;
     keyDownCallback?: (event: ApperKeyEvent) => boolean;
     keyUpCallback?: (event: ApperKeyEvent) => boolean;
@@ -132,24 +160,19 @@ export class GraphicalEditor {
         this.#element.appendChild(this.#title);
         this.#updateTitleWidth();
 
-        this.#view = new Viewport();
-        this.#cursorPos = new Vector2(NaN);
-        this.#cursorWorldPos = new Vector2(NaN);
-
         let ctx = this.#canvas.getContext("2d");
         if (!ctx) {
-            throw new Error("2d rendering context not supported.");
+            throw new Error("2d rendering context not supported!");
         }
         this.#ctx = ctx;
 
+        // TODO: is window resize really the right event to listen for?
         window.addEventListener("resize", this.#handleResize.bind(this), { passive: true });
-        this.#canvas.addEventListener("mousedown", this.#handleMouseDown.bind(this), { passive: false });
-        document.addEventListener("mousemove", this.#handleMouseMove.bind(this), { passive: true });
-        document.addEventListener("mouseup", this.#handleMouseUp.bind(this), { capture: true, passive: true });
-        this.#canvas.addEventListener("mouseleave", this.#handleMouseLeave.bind(this), { passive: true });
-        this.#canvas.addEventListener("touchstart", this.#handleMouseDown.bind(this), { passive: false });
-        document.addEventListener("touchmove", this.#handleMouseMove.bind(this), { passive: true });
-        document.addEventListener("touchend", this.#handleMouseUp.bind(this), { passive: true });
+        this.#canvas.addEventListener("pointerdown", this.#handlePointerDown.bind(this), { passive: false });
+        this.#canvas.addEventListener("pointermove", this.#handlePointerMove.bind(this), { passive: true });
+        this.#canvas.addEventListener("pointerup", this.#handlePointerUp.bind(this), { passive: true });
+        this.#canvas.addEventListener("pointercancel", this.#handlePointerCancel.bind(this), { passive: true });
+        this.#canvas.addEventListener("pointerleave", this.#handlePointerLeave.bind(this), { passive: true });
         this.#canvas.addEventListener("contextmenu", this.#handleContextMenu.bind(this), { passive: false });
         this.#canvas.addEventListener("wheel", this.#handleWheel.bind(this), { passive: false });
         document.addEventListener("keydown", this.#handleKeyDown.bind(this), { capture: true, passive: false });
@@ -202,16 +225,8 @@ export class GraphicalEditor {
         return this.#view;
     }
 
-    get scale(): number {
-        return window.devicePixelRatio;
-    }
-
-    get cursorPos(): Vector2 {
-        return this.#cursorPos.copy();
-    }
-
-    get cursorWorldPos(): Vector2 {
-        return this.#cursorWorldPos.copy();
+    get hoverPos(): Vector2 | null {
+        return this.#hoverPos && this.#hoverPos.copy();
     }
 
     get toolbar(): Toolbar | null {
@@ -253,8 +268,8 @@ export class GraphicalEditor {
         this.#hasUnsavedChanges = unsaved;
     }
 
-    onUpdate(callback: () => void): this {
-        this.updateCallback = callback;
+    onRedraw(callback: () => void): this {
+        this.redrawCallback = callback;
         return this;
     }
 
@@ -263,23 +278,28 @@ export class GraphicalEditor {
         return this;
     }
 
-    onMouseDown(callback: (event: ApperMouseDownEvent) => boolean): this {
-        this.mouseDownCallback = callback;
+    onHoverMove(callback: () => boolean): this {
+        this.hoverMoveCallback = callback;
         return this;
     }
 
-    onMouseMove(callback: (event: ApperMouseMoveEvent) => boolean): this {
-        this.mouseMoveCallback = callback;
+    onDragStart(callback: (event: ApperDragEvent) => boolean): this {
+        this.dragStartCallback = callback;
         return this;
     }
 
-    onMouseUp(callback: (event: ApperMouseUpEvent) => boolean): this {
-        this.mouseUpCallback = callback;
+    onDragMove(callback: (event: ApperDragEvent) => boolean): this {
+        this.dragMoveCallback = callback;
         return this;
     }
 
-    onContextMenu(callback: (event: ApperContextMenuEvent) => boolean): this {
-        this.contextMenuCallback = callback;
+    onDragFinish(callback: (event: ApperDragEvent) => boolean): this {
+        this.dragFinishCallback = callback;
+        return this;
+    }
+
+    onDragCancel(callback: (event: ApperDragEvent) => boolean): this {
+        this.dragCancelCallback = callback;
         return this;
     }
 
@@ -318,7 +338,6 @@ export class GraphicalEditor {
     }
 
     #updateTitleWidth(): void {
-        // FIXME: this doesn't really work properly when the document first loads for some reason
         this.#title.style.width = `${getTextMetrics(this.title, "normal 16px 'Nunito'").width + 12}px`;
     }
 
@@ -378,19 +397,20 @@ export class GraphicalEditor {
         return this.#view.locateY(screenY);
     }
 
-    update(): void {
+    redraw(): void {
         this.#ctx.clearRect(0, 0, this.width, this.height);
 
-        this.updateCallback?.();
+        this.redrawCallback?.();
     }
 
     #handleResize(): void {
-        this.#canvas.width = this.width * this.scale;
-        this.#canvas.height = this.height * this.scale;
+        let scale = window.devicePixelRatio;
+        this.#canvas.width = this.width * scale;
+        this.#canvas.height = this.height * scale;
         this.#ctx.resetTransform();
-        this.#ctx.scale(this.scale, this.scale);
+        this.#ctx.scale(scale, scale);
         this.#view.size.set(this.width, this.height);
-        this.#view.scale = this.scale;
+        this.#view.scale = scale;
 
         let info = {
             width: this.width,
@@ -399,151 +419,167 @@ export class GraphicalEditor {
 
         this.resizeCallback?.(info);
 
-        this.update();
+        this.redraw();
     }
 
-    #handleMouseDown(event: MouseEvent | TouchEvent): void {
-        let screenPos, buttons, button;
-        if ("touches" in event) {
-            let touch = event.touches[0];
-            if (!touch) return;
-            screenPos = new Vector2(touch.pageX, touch.pageY);
-            buttons = 1;
-            button = 0;
-        } else {
-            screenPos = new Vector2(event.pageX, event.pageY);
-            buttons = event.buttons;
-            button = event.button;
+    #updateModifiers(mods: ModifierKeys): void {
+        this.#altKey = mods.altKey;
+        this.#ctrlKey = mods.ctrlKey || mods.metaKey;
+        this.#shiftKey = mods.shiftKey;
+    }
+
+    #updateGesture(): void {
+        let activePointers = [...this.#activePointers.values()];
+
+        if (this.#currentGesture.type === "none") {
+            if (activePointers.length === 1) {
+                let pointer = activePointers[0]!;
+                this.#currentGesture = dragGesture(pointer);
+                if (this.dragStartCallback?.(pointer)) {
+                    this.redraw();
+                }
+            }
+            else if (activePointers.length !== 0) {
+                console.log("Programmer error: more than 1 new pointer at once in none gesture!");
+            }
         }
-        screenPos = screenPos.sub(this.element.offsetLeft, this.element.offsetTop);
+        else if (this.#currentGesture.type === "drag") {
+            if (activePointers.length === 0) {
+                let { startState } = this.#currentGesture;
+                this.#currentGesture = noneGesture();
+                if (this.dragFinishCallback?.(startState)) {
+                    this.redraw();
+                }
+            }
+            else if (activePointers.length === 1) {
+                let pointer = activePointers[0]!;
+                if (pointer.id !== this.#currentGesture.id) {
+                    console.error("Programmer error: pointer ID mismatch detected during drag gesture!");
+                }
+                this.#hoverPos = new Vector2(pointer);
+                if (this.dragMoveCallback?.(pointer)) {
+                    this.redraw();
+                }
+            }
+            else if (activePointers.length === 2) {
+                let pointer1 = activePointers[0]!;
+                let pointer2 = activePointers[1]!;
+                if (pointer1.id !== this.#currentGesture.id) {
+                    [pointer1, pointer2] = [pointer2, pointer1];
+                }
+                if (pointer1.id !== this.#currentGesture.id) {
+                    console.error("Programmer error: pointer ID mismatch detected during transition from drag to view gesture!");
+                }
+                let { startState } = this.#currentGesture;
+                this.#currentGesture = viewGesture(pointer1, pointer2, this.#view);
+                if (this.dragCancelCallback?.(startState)) {
+                    this.redraw();
+                }
+            }
+            else {
+                console.log("Programmer error: more than 1 new pointer at once in drag gesture!");
+            }
+        }
+        else if (this.#currentGesture.type === "view") {
+            if (activePointers.length === 2) {
+                let pointer1 = activePointers[0]!;
+                let pointer2 = activePointers[1]!;
+                if (pointer1.id !== this.#currentGesture.id1) {
+                    [pointer1, pointer2] = [pointer2, pointer1];
+                }
+                if (pointer1.id !== this.#currentGesture.id1 || pointer2.id !== this.#currentGesture.id2) {
+                    console.error("Programmer error: pointer ID mismatch detected during view gesture!");
+                }
+                // Calculate the new viewport center and zoom level
+                let midpoint = Vector2.midpoint(pointer1, pointer2);
+                let distance = Math.max(config.minPinchDistance, Vector2.distance(pointer1, pointer2));
+                let zoomChange = distance / this.#currentGesture.startDistance;
+                this.#view.center.set(this.#currentGesture.startView.center.add(this.#currentGesture.startMidpoint.sub(midpoint).div(zoomChange)));
+                this.#view.zoom = this.#currentGesture.startView.zoom * zoomChange;
+            }
+            else {
+                this.#currentGesture = resetGesture();
+            }
+            this.redraw();
+        }
+        else { // reset
+            if (activePointers.length === 0) {
+                this.#currentGesture = noneGesture();
+            }
+        }
+    }
 
-        let info = {
-            isTouch: "touches" in event,
-            screenPos,
-            worldPos: this.locate(screenPos),
-            altKey: this.#altKey = event.altKey ?? this.#altKey,
-            ctrlKey: this.#ctrlKey = (event.ctrlKey || event.metaKey) ?? this.#ctrlKey,
-            shiftKey: this.#shiftKey = event.shiftKey ?? this.#shiftKey,
-            leftBtn: !!(buttons & 1),
-            rightBtn: !!(buttons & 2),
-            middleBtn: !!(buttons & 4),
-            button,
-        };
+    #handlePointerDown(event: PointerEvent): void {
+        event.stopPropagation();
+        event.preventDefault();
 
+        let pointerX = event.pageX - this.#element.offsetLeft;
+        let pointerY = event.pageY - this.#element.offsetTop;
+
+        this.#canvas.setPointerCapture(event.pointerId);
         this.focusCanvas();
-        this.#cursorPos.set(screenPos);
-        this.#cursorWorldPos.set(info.worldPos);
 
-        if (this.mouseDownCallback?.(info)) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-
-        this.update();
+        this.#activePointers.set(event.pointerId, {
+            id: event.pointerId,
+            x: pointerX,
+            y: pointerY,
+            button: event.button,
+        });
+        this.#updateGesture();
     }
 
-    #handleMouseMove(event: MouseEvent | TouchEvent): void {
-        let screenPos, buttons;
-        if ("touches" in event) {
-            let touch = event.touches[0];
-            if (!touch) return;
-            screenPos = new Vector2(touch.pageX, touch.pageY);
-            buttons = 1;
-        } else {
-            // Don't report cursor position if hovering over something other
-            // than the canvas.
-            screenPos = event.target !== this.#canvas && event.buttons === 0
-                ? new Vector2(NaN)
-                : new Vector2(event.pageX, event.pageY);
-            buttons = event.buttons;
+    #handlePointerMove(event: PointerEvent): void {
+        let pointerX = event.pageX - this.#element.offsetLeft;
+        let pointerY = event.pageY - this.#element.offsetTop;
+
+        let activePointer = this.#activePointers.get(event.pointerId);
+        if (activePointer) {
+            activePointer.x = pointerX;
+            activePointer.y = pointerY;
+            this.#updateGesture();
         }
-        screenPos = screenPos.sub(this.element.offsetLeft, this.element.offsetTop);
-
-        let info = {
-            isTouch: "touches" in event,
-            onCanvas: event.target === this.#canvas,
-            screenPos,
-            worldPos: this.locate(screenPos),
-            altKey: this.#altKey = event.altKey ?? this.#altKey,
-            ctrlKey: this.#ctrlKey = (event.ctrlKey || event.metaKey) ?? this.#ctrlKey,
-            shiftKey: this.#shiftKey = event.shiftKey ?? this.#shiftKey,
-            leftBtn: !!(buttons & 1),
-            rightBtn: !!(buttons & 2),
-            middleBtn: !!(buttons & 4),
-        };
-
-        this.#cursorPos.set(screenPos);
-        this.#cursorWorldPos.set(info.worldPos);
-
-        if (this.mouseMoveCallback?.(info)) {
-            this.update();
+        else if (this.#activePointers.size === 0) {
+            // TODO: This assumes at most one hovering pointer. Unlikely to have
+            // TODO: more than that, but it's not guaranteed.
+            this.#hoverPos = new Vector2(pointerX, pointerY);
+            if (this.hoverMoveCallback?.()) {
+                this.redraw();
+            }
         }
     }
 
-    #handleMouseUp(event: MouseEvent | TouchEvent): void {
-        let buttons, button;
-        if ("touches" in event) {
-            buttons = 1;
-            button = 0;
-        } else {
-            buttons = event.buttons;
-            button = event.button;
-        }
-
-        let info = {
-            isTouch: "touches" in event,
-            altKey: this.#altKey = event.altKey ?? this.#altKey,
-            ctrlKey: this.#ctrlKey = (event.ctrlKey || event.metaKey) ?? this.#ctrlKey,
-            shiftKey: this.#shiftKey = event.shiftKey ?? this.#shiftKey,
-            leftBtn: !!(buttons & 1),
-            rightBtn: !!(buttons & 2),
-            middleBtn: !!(buttons & 4),
-            button,
-        };
-
-        if (this.mouseUpCallback?.(info)) {
-            this.update();
-        }
+    #handlePointerUp(event: PointerEvent): void {
+        this.#activePointers.delete(event.pointerId);
+        this.#updateGesture();
     }
 
-    #handleMouseLeave(event: MouseEvent): void {
-        if (event.buttons === 0) {
-            this.#cursorPos.set(NaN);
-            this.#cursorWorldPos.set(NaN);
-            this.update();
+    #handlePointerCancel(event: PointerEvent): void {
+        // FIXME: This should actually cancel the current gesture and reset.
+        this.#activePointers.delete(event.pointerId);
+        this.#updateGesture();
+    }
+
+    #handlePointerLeave(event: PointerEvent): void {
+        // It's fine to check that there are no active pointers here. The spec
+        // states that pointerleave is always fired after pointerup, so any
+        // changes to the current gesture are already processed.
+        if (this.#activePointers.size === 0) {
+            this.#hoverPos = null;
+            if (this.hoverMoveCallback?.()) {
+                this.redraw();
+            }
         }
     }
 
     #handleContextMenu(event: PointerEvent): void {
-        let screenPos = new Vector2(
-            event.pageX - this.element.offsetLeft,
-            event.pageY - this.element.offsetTop,
-        );
-
-        let info = {
-            screenPos,
-            worldPos: this.locate(screenPos),
-            altKey: this.#altKey = event.altKey ?? this.#altKey,
-            ctrlKey: this.#ctrlKey = (event.ctrlKey || event.metaKey) ?? this.#ctrlKey,
-            shiftKey: this.#shiftKey = event.shiftKey ?? this.#shiftKey,
-            leftBtn: !!(event.buttons & 1),
-            rightBtn: !!(event.buttons & 2),
-            middleBtn: !!(event.buttons & 4),
-            button: event.button,
-        };
-
-        this.#cursorPos.set(screenPos);
-        this.#cursorWorldPos.set(info.worldPos);
-
-        if (this.contextMenuCallback?.(info)) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-
-        this.update();
+        event.preventDefault();
+        event.stopPropagation();
     }
 
     #handleWheel(event: WheelEvent): void {
+        event.preventDefault();
+        event.stopPropagation();
+
         let info = {
             altKey: this.#altKey = event.altKey ?? this.#altKey,
             ctrlKey: this.#ctrlKey = (event.ctrlKey || event.metaKey) ?? this.#ctrlKey,
@@ -553,16 +589,14 @@ export class GraphicalEditor {
         };
 
         if (this.wheelCallback?.(info)) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            this.update();
+            this.redraw();
         }
     }
 
     #handleKeyDown(event: KeyboardEvent): void {
+        this.#updateModifiers(event);
         if (event.target !== this.#canvas) {
-            this.update();
+            this.redraw();
             return;
         }
 
@@ -578,12 +612,13 @@ export class GraphicalEditor {
             event.stopPropagation();
         }
 
-        this.update();
+        this.redraw();
     }
 
     #handleKeyUp(event: KeyboardEvent): void {
+        this.#updateModifiers(event);
         if (event.target !== this.#canvas) {
-            this.update();
+            this.redraw();
             return;
         }
 
@@ -596,7 +631,7 @@ export class GraphicalEditor {
 
         if (this.keyUpCallback?.(info)) {}
 
-        this.update();
+        this.redraw();
     }
 }
 
@@ -713,7 +748,7 @@ export class Toolbar {
         if (selectedButton) {
             selectedButton.classList.add("apper-button-selected");
         }
-        this.#app.update();
+        this.#app.redraw();
     }
 
     show(): this {

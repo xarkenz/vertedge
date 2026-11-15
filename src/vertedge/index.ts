@@ -28,7 +28,7 @@ import icon_upload from "./assets/icons/upload.svg";
 import icon_width from "./assets/icons/width.svg";
 
 import * as zod from "zod";
-import { GraphicalEditor, Modal, Panel, Shortcut, Tool, type ApperContextMenuEvent, type ApperKeyEvent, type ApperMouseDownEvent, type ApperMouseMoveEvent, type ApperMouseUpEvent, type ApperWheelEvent } from "@/apper";
+import { GraphicalEditor, Modal, Panel, Shortcut, Tool, type ApperDragEvent, type ApperKeyEvent, type ApperWheelEvent } from "@/apper";
 import { Edge, getVertexShapeByID, Vertex, VertexShape, type EdgeDescriptor } from "./graph";
 import { Color, getFillColorIcon, getStrokeColorIcon, linesIntersect, nearestOnLineSegment, nearestOnQuadraticCurve, quadraticCurve, quadraticCurveVertexX, quadraticCurveVertexY } from "./util";
 import { Button, ButtonList, CanvasImage, Checkbox, FileInput, HSpread, NumberInput, Paragraph, TextEditor } from "@/apper/widget";
@@ -161,11 +161,12 @@ export class Vertedge {
 
     constructor(element: HTMLElement) {
         this.app = new GraphicalEditor(element)
-            .onUpdate(this.render.bind(this))
-            .onMouseDown(this.handleMouseDown.bind(this))
-            .onMouseMove(this.handleMouseMove.bind(this))
-            .onMouseUp(this.handleMouseUp.bind(this))
-            .onContextMenu(this.openContextMenu.bind(this))
+            .onRedraw(this.render.bind(this))
+            .onHoverMove(this.handleHoverMove.bind(this))
+            .onDragStart(this.handleDragStart.bind(this))
+            .onDragMove(this.handleDragMove.bind(this))
+            .onDragFinish(this.handleDragFinish.bind(this))
+            .onDragCancel(this.handleDragCancel.bind(this))
             .onWheel(this.handleScroll.bind(this))
             .onKeyDown(this.handleKeyDown.bind(this))
             .setDefaultTitle("Untitled Graph");
@@ -195,7 +196,7 @@ export class Vertedge {
                             element.fill = color;
                         }
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .add(this.style_lineColor = new HSpread("vertedge-line-color", "Line color:", colorOptions.map(color => getStrokeColorIcon(color)), icon_stroke)
                 .onChange(value => {
@@ -204,7 +205,7 @@ export class Vertedge {
                     this.selection.forEach(element => {
                         element.stroke = color;
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .addSeparator()
             .add(this.style_vertexShape = new HSpread("vertedge-vertex-shape", "Shape:", shapeOptions, icon_shape)
@@ -216,7 +217,7 @@ export class Vertedge {
                             element.shape = shape;
                         }
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .add(this.style_vertexRadius = new NumberInput("vertedge-vertex-radius", "Radius:", icon_radius).setMin(0)
                 .onChange(value => {
@@ -225,21 +226,21 @@ export class Vertedge {
                             element.r = value;
                         }
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .add(this.style_lineWidth = new NumberInput("vertedge-line-width", "Line width:", icon_lineWidth).setMin(0)
                 .onChange(value => {
                     this.selection.forEach(element => {
                         element.lineWidth = value;
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .add(this.style_lineDash = new Checkbox("vertedge-line-dash", "Dashed line")
                 .onChange(value => {
                     this.selection.forEach(element => {
                         element.lineDash = value ? config.defaultLineDash : [];
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .addSeparator()
             .add(this.style_edgeDirected = new Checkbox("vertedge-edge-directed", "Directed edge")
@@ -249,7 +250,7 @@ export class Vertedge {
                             element.directed = value;
                         }
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .add(this.style_reverseEdge = new Button("Reverse Edge Direction")
                 .onClick(() => {
@@ -258,7 +259,7 @@ export class Vertedge {
                             element.reverse();
                         }
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .add(this.style_arrowAngle = new NumberInput("vertedge-arrow-angle", "Arrow angle (degrees):").setMin(0).setMax(90)
                 .onChange(value => {
@@ -267,7 +268,7 @@ export class Vertedge {
                             element.arrowAngle = value;
                         }
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .add(this.style_arrowLength = new NumberInput("vertedge-arrow-length", "Arrow length:").setMin(0)
                 .onChange(value => {
@@ -276,30 +277,30 @@ export class Vertedge {
                             element.arrowLength = value;
                         }
                     });
-                    this.app.update();
+                    this.app.redraw();
                 }));
 
         this.gridPanel = this.app.addPanel("Grid Settings")
             .addSeparator()
             .add(this.grid_enableAxes = new Checkbox("vertedge-show-axes", "Show axes")
-                .onChange(() => this.app.update()))
+                .onChange(() => this.app.redraw()))
             .add(this.grid_enableGrid = new Checkbox("vertedge-enable-grid", "Enable grid")
-                .onChange(() => this.app.update()))
+                .onChange(() => this.app.redraw()))
             .add(this.grid_gridStepX = new NumberInput("vertedge-grid-step-x", "Horizontal spacing:", icon_width, 50).setMin(1)
-                .onChange(() => this.app.update()))
+                .onChange(() => this.app.redraw()))
             .add(this.grid_gridStepY = new NumberInput("vertedge-grid-step-y", "Vertical spacing:", icon_height, 50).setMin(1)
-                .onChange(() => this.app.update()));
+                .onChange(() => this.app.redraw()));
 
         this.capturePanel = this.app.addPanel("Capture Image")
             .addSeparator()
             .add(this.capture_prompt = new Paragraph("To capture a graph image, try adding some elements to the graph."))
             .add(this.capture_instructions = new Paragraph("Resize the box to crop the resulting image. To move the view, drag from outside the box.").hide())
             .add(this.capture_selectionOnly = new Checkbox("vertedge-capture-selection-only", "Capture selection only").hide()
-                .onChange(() => this.app.update()))
+                .onChange(() => this.app.redraw()))
             .add(this.capture_fitGraph = new Button("Fit Entire Graph").hide()
                 .onClick(() => {
                     this.fitCaptureTo(this.allElements());
-                    this.app.update();
+                    this.app.redraw();
                 }))
             .addSeparator()
             .add(this.capture_emptyPreview = new Paragraph("An image preview will appear here."))
@@ -316,7 +317,7 @@ export class Vertedge {
             .add(new Paragraph("Import an existing graph from your device by clicking the button below:"))
             .add(new FileInput(`<img src="${icon_upload}"> Upload JSON`)
                 .onChange(files => {
-                    this.app.update();
+                    this.app.redraw();
                     if (files && files[0]) {
                         this.loadFromFile(files[0]);
                     }
@@ -324,7 +325,7 @@ export class Vertedge {
                 }))
             .add(new ButtonList("Example Graphs:", exampleGraphs.map(({ url, title }) => ({ label: title, value: url })))
                 .onClick(url => {
-                    this.app.update();
+                    this.app.redraw();
                     this.loadFromURL(url);
                     this.app.tool = this.app.toolbar && this.app.toolbar.defaultTool;
                 }));
@@ -346,7 +347,7 @@ export class Vertedge {
                             this.data_editor.valid = false;
                         }
                     }
-                    this.app.update();
+                    this.app.redraw();
                 }));
 
         this.helpModal = this.app.addModal("Vertedge Help")
@@ -375,7 +376,7 @@ export class Vertedge {
             .add(new Paragraph(`<b>Deselect All</b> - <kbd>Ctrl</kbd>/<kbd>⌘Cmd</kbd> <kbd>Shift</kbd> <kbd>A</kbd> or <kbd>Esc</kbd><br>Deselect all currently selected graph elements.`))
             .add(new Paragraph(`<b>Erase Selected</b> - <kbd>Delete</kbd> or <kbd>Backspace</kbd><br>Remove all currently selected elements from the graph. If a vertex is removed, all connecting edges are removed.`));
 
-        this.app.update();
+        this.app.redraw();
 
         let graphSourceURL = new URLSearchParams(window.location.search).get("src");
         if (graphSourceURL) {
@@ -752,9 +753,9 @@ export class Vertedge {
             this.app.ctx.lineTo(this.dragState.x + 8, this.dragState.y);
             this.app.ctx.stroke();
         }
-        else if (this.app.tool === Tools.DRAW && !this.app.cursorPos.isNaN()) {
-            let drawingLoop = this.firstVertex != null && this.app.ctrlKey;
-            let pos = gridEnabled ? this.app.transform(this.snapToGrid(this.app.cursorWorldPos)) : this.app.cursorPos;
+        else if (this.app.tool === Tools.DRAW && this.app.hoverPos) {
+            let drawingLoop = this.firstVertex && this.app.ctrlKey;
+            let pos = gridEnabled ? this.app.transform(this.snapToGrid(this.app.locate(this.app.hoverPos))) : this.app.hoverPos;
             // Draw vertex preview
             this.app.ctx.fillStyle = `${this.color}aa`;
             this.app.ctx.strokeStyle = `${this.color}aa`;
@@ -779,9 +780,10 @@ export class Vertedge {
                 // Draw both dot and outline snapped to the edge to indicate that the edge will be split
                 let p0 = new Vector2(element.v1);
                 let p1 = new Vector2(element.v2);
+                let hoverWorldPos = this.app.locate(this.app.hoverPos);
                 pos = this.app.transform(element.cp
-                    ? nearestOnQuadraticCurve(p0, element.cp, p1, this.app.cursorWorldPos)[0]
-                    : nearestOnLineSegment(p0, p1, this.app.cursorWorldPos)[0]);
+                    ? nearestOnQuadraticCurve(p0, element.cp, p1, hoverWorldPos)[0]
+                    : nearestOnLineSegment(p0, p1, hoverWorldPos)[0]);
                 this.app.ctx.beginPath();
                 this.app.ctx.ellipse(pos.x, pos.y, 5, 5, 0, 0, 2 * Math.PI);
                 this.app.ctx.fill();
@@ -795,7 +797,7 @@ export class Vertedge {
                 this.app.ctx.stroke();
             }
             // Draw edge preview, if applicable
-            if (this.firstVertex != null) {
+            if (this.firstVertex) {
                 this.app.ctx.setLineDash([5, 5]);
                 this.app.ctx.beginPath();
                 let start = this.app.transform(this.firstVertex);
@@ -811,7 +813,7 @@ export class Vertedge {
                 this.app.ctx.stroke();
             }
         }
-        else if (this.dragState && !this.dragState.elements.length && !this.app.cursorPos.isNaN()) {
+        else if (this.dragState && this.dragState.elements.length === 0 && this.app.hoverPos) {
             // Draw selection box
             this.app.ctx.strokeStyle = `${this.color}77`;
             this.app.ctx.lineWidth = 2;
@@ -819,13 +821,13 @@ export class Vertedge {
             // Below differs from ctx.rect() because it locks the line dash at the start and end corners, which looks nicer
             this.app.ctx.beginPath();
             this.app.ctx.moveTo(this.dragState.x, this.dragState.y);
-            this.app.ctx.lineTo(this.app.cursorPos.x, this.dragState.y);
+            this.app.ctx.lineTo(this.app.hoverPos.x, this.dragState.y);
             this.app.ctx.moveTo(this.dragState.x, this.dragState.y);
-            this.app.ctx.lineTo(this.dragState.x, this.app.cursorPos.y);
-            this.app.ctx.moveTo(this.app.cursorPos.x, this.app.cursorPos.y);
-            this.app.ctx.lineTo(this.dragState.x, this.app.cursorPos.y);
-            this.app.ctx.moveTo(this.app.cursorPos.x, this.app.cursorPos.y);
-            this.app.ctx.lineTo(this.app.cursorPos.x, this.dragState.y);
+            this.app.ctx.lineTo(this.dragState.x, this.app.hoverPos.y);
+            this.app.ctx.moveTo(this.app.hoverPos.x, this.app.hoverPos.y);
+            this.app.ctx.lineTo(this.dragState.x, this.app.hoverPos.y);
+            this.app.ctx.moveTo(this.app.hoverPos.x, this.app.hoverPos.y);
+            this.app.ctx.lineTo(this.app.hoverPos.x, this.dragState.y);
             this.app.ctx.stroke();
         }
 
@@ -874,26 +876,27 @@ export class Vertedge {
         }
     }
 
-    handleMouseDown(event: ApperMouseDownEvent): boolean {
-        if (event.button === 0 || event.button === 2) {
-            if (this.dragState && event.button !== this.dragState.button) {
-                return true;
-            }
+    handleHoverMove(): boolean {
+        // TODO: Can return false if the hovered object has not changed
+        return true;
+    }
 
+    handleDragStart(event: ApperDragEvent): boolean {
+        if (event.button === 0 || event.button === 2) {
             let canSelect = event.button !== 2 && this.app.tool !== Tools.MOVE && this.app.tool !== Tools.CAPTURE;
             let element = canSelect ? this.elementAtCursor() : null;
 
             if (this.app.tool === Tools.DRAW && event.button === 0) {
                 if (element instanceof Vertex) {
-                    if (this.firstVertex !== null) {
+                    if (this.firstVertex) {
                         this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
                     } else {
                         this.firstVertex = element;
                     }
                 }
                 else if (element instanceof Edge && !element.isLoop()) {
-                    element = this.splitEdgeAt(element, event.worldPos);
-                    if (this.firstVertex != null) {
+                    element = this.splitEdgeAt(element, this.app.locate(event));
+                    if (this.firstVertex) {
                         this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
                         this.firstVertex = null;
                     } else {
@@ -901,10 +904,10 @@ export class Vertedge {
                     }
                 }
                 else {
-                    let placed = new Vertex(this.snapToGrid(event.worldPos));
+                    let placed = new Vertex(this.snapToGrid(this.app.locate(event)));
                     this.vertices.push(placed);
                     element = placed;
-                    if (this.firstVertex != null && this.firstVertex !== element) {
+                    if (this.firstVertex && this.firstVertex !== element) {
                         this.edges.push(new Edge({v1: this.firstVertex, v2: placed}));
                         this.firstVertex = null;
                     } else {
@@ -923,10 +926,10 @@ export class Vertedge {
             }
 
             if (!element) {
-                if (canSelect && !event.shiftKey) {
+                if (canSelect && !this.app.shiftKey) {
                     this.selection = [];
                 }
-            } else if (event.shiftKey) {
+            } else if (this.app.shiftKey) {
                 if (this.selection.includes(element)) {
                     this.selection.splice(this.selection.indexOf(element), 1);
                 } else {
@@ -936,7 +939,7 @@ export class Vertedge {
                 this.selection = [element];
             }
 
-            let elements = event.shiftKey ? [] : this.selection.map(item => {
+            let elements = this.app.shiftKey ? [] : this.selection.map(item => {
                 // TODO: use a flag instead of changing the actual style
                 let orig = item.copy();
                 if ("fill" in orig) {
@@ -953,8 +956,8 @@ export class Vertedge {
 
             this.dragState = {
                 button: event.button,
-                x: event.screenPos.x,
-                y: event.screenPos.y,
+                x: event.x,
+                y: event.y,
                 view: this.app.view.copy(),
                 elements,
                 captureArea: this.captureArea,
@@ -967,19 +970,13 @@ export class Vertedge {
         return false;
     }
 
-    handleMouseMove(event: ApperMouseMoveEvent): boolean {
-        if (event.screenPos.isNaN()) {
+    handleDragMove(event: ApperDragEvent): boolean {
+        if (!this.dragState) {
             return false;
         }
-        if (!this.dragState) {
-            return true;
-        }
-        if (!event.leftBtn && !event.rightBtn) {
-            return true;
-        }
 
-        let dx = event.screenPos.x - this.dragState.x;
-        let dy = event.screenPos.y - this.dragState.y;
+        let dx = event.x - this.dragState.x;
+        let dy = event.y - this.dragState.y;
         let revertX = Math.abs(dx) <= config.revertProximityPixels;
         let revertY = Math.abs(dy) <= config.revertProximityPixels;
         let revert = revertX && revertY;
@@ -1018,7 +1015,7 @@ export class Vertedge {
             for (let { element, index } of this.dragState.elements) {
                 let vertex, edge;
                 if (element instanceof Vertex && (vertex = this.vertices[index])) {
-                    if (this.app.tool !== Tools.DRAW || this.firstVertex === null) {
+                    if (this.app.tool !== Tools.DRAW || !this.firstVertex) {
                         let p = revert ? new Vector2(element) : this.snapToGrid(new Vector2(element).add(dx / this.app.view.zoom, dy / this.app.view.zoom));
                         vertex.x = p.x;
                         vertex.y = p.y;
@@ -1036,7 +1033,7 @@ export class Vertedge {
                             this.app.ctx.beginPath();
                             this.app.ctx.moveTo(this.app.transformX(edge.v1.x), this.app.transformY(edge.v1.y));
                             this.app.ctx.lineTo(this.app.transformX(edge.v2.x), this.app.transformY(edge.v2.y));
-                            if (this.app.ctx.isPointInStroke(this.app.transformX(edge.cp.x) * this.app.scale, this.app.transformY(edge.cp.y) * this.app.scale)) {
+                            if (this.app.ctx.isPointInStroke(this.app.transformX(edge.cp.x) * this.app.view.scale, this.app.transformY(edge.cp.y) * this.app.view.scale)) {
                                 edge.cp = null;
                             }
                         }
@@ -1050,13 +1047,14 @@ export class Vertedge {
         return true;
     }
 
-    handleMouseUp(event: ApperMouseUpEvent): boolean {
-        if (!this.dragState || event.button !== this.dragState.button) {
+    handleDragFinish(event: ApperDragEvent): boolean {
+        if (!this.dragState) {
             return false;
         }
 
-        let dx = this.app.cursorPos.x - this.dragState.x;
-        let dy = this.app.cursorPos.y - this.dragState.y;
+        let finalPos = this.app.hoverPos || new Vector2(event);
+        let dx = finalPos.x - this.dragState.x;
+        let dy = finalPos.y - this.dragState.y;
         let revertX = Math.abs(dx) <= config.revertProximityPixels;
         let revertY = Math.abs(dy) <= config.revertProximityPixels;
         let revert = revertX && revertY;
@@ -1064,9 +1062,9 @@ export class Vertedge {
         let element = this.dragState.button === 2 || this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAtCursor();
 
         if (this.app.tool === Tools.DRAW) {
-            if (this.firstVertex !== null && this.firstVertex !== element) {
-                if (event.ctrlKey) {
-                    let loop = new Edge({v1: this.firstVertex, v2: this.firstVertex, cp: this.snapToGrid(this.app.locate(this.app.cursorPos))});
+            if (this.firstVertex && this.firstVertex !== element) {
+                if (this.app.ctrlKey) {
+                    let loop = new Edge({v1: this.firstVertex, v2: this.firstVertex, cp: this.snapToGrid(this.app.locate(finalPos))});
                     this.edges.push(loop);
                     this.selection = [loop];
                 } else {
@@ -1074,11 +1072,11 @@ export class Vertedge {
                         this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
                         this.selection = [element];
                     } else if (element instanceof Edge && !element.isLoop()) {
-                        let pos = this.app.locate(this.app.cursorPos);
+                        let pos = this.app.locate(finalPos);
                         let v2 = this.splitEdgeAt(element, pos);
                         this.edges.push(new Edge({v1: this.firstVertex, v2}));
                     } else {
-                        let pos = this.snapToGrid(this.app.locate(this.app.cursorPos));
+                        let pos = this.snapToGrid(this.app.locate(finalPos));
                         // Prevent creating duplicate vertices in the same position (e.g. when grid snapping is enabled)
                         let v2 = this.vertices.findLast(vertex => pos.equals(vertex));
                         if (!v2) {
@@ -1108,16 +1106,11 @@ export class Vertedge {
             }
         }
         else if (this.dragState.button !== 2 && this.app.tool !== Tools.MOVE && !this.dragState.elements.length) {
-            if (!event.shiftKey) {
+            if (!this.app.shiftKey) {
                 this.selection = [];
             }
             if (!revert) {
-                let selectBox = new Rect(
-                    this.dragState.x,
-                    this.dragState.y,
-                    this.app.cursorPos.x - this.dragState.x,
-                    this.app.cursorPos.y - this.dragState.y,
-                ).located(this.app.view).normalized();
+                let selectBox = new Rect(this.dragState.x, this.dragState.y, dx, dy).located(this.app.view).normalized();
 
                 let toSelect: (Vertex | Edge)[] = this.vertices.filter(vertex => {
                     // Check if the selectBox intersects the bounding box of the vertex
@@ -1188,8 +1181,29 @@ export class Vertedge {
         return true;
     }
 
-    openContextMenu(event: ApperContextMenuEvent): boolean {
-        // TODO: custom context menu
+    handleDragCancel(event: ApperDragEvent): boolean {
+        if (!this.dragState) {
+            return false;
+        }
+
+        for (let { element, index } of this.dragState.elements) {
+            let vertex, edge;
+            if (element instanceof Vertex && (vertex = this.vertices[index])) {
+                if (this.app.tool !== Tools.DRAW || !this.firstVertex) {
+                    vertex.x = element.x;
+                    vertex.y = element.y;
+                }
+            } else if (element instanceof Edge && (edge = this.edges[index])) {
+                edge.cp = element.cp;
+            }
+        }
+
+        this.app.view.center.set(this.dragState.view.center);
+        this.app.view.zoom = this.dragState.view.zoom;
+        this.captureArea = this.dragState.captureArea;
+
+        this.dragState = null;
+        this.firstVertex = null;
         return true;
     }
 
@@ -1197,7 +1211,7 @@ export class Vertedge {
         if (event.dy === 0) {
             return false;
         }
-        this.app.view.changeZoom(-event.dy * config.scrollZoomMultiplier, this.app.cursorPos.isNaN() ? undefined : this.app.cursorPos);
+        this.app.view.changeZoom(-event.dy * config.scrollZoomMultiplier, this.app.hoverPos || undefined);
         return true;
     }
 
@@ -1217,13 +1231,13 @@ export class Vertedge {
                 this.app.tool = Tools.ERASE;
                 return true;
             case "s":
-                this.app.tool = event.ctrlKey ? Tools.SAVE : Tools.STYLE;
+                this.app.tool = this.app.ctrlKey ? Tools.SAVE : Tools.STYLE;
                 return true;
             case "g":
                 this.app.tool = Tools.GRID;
                 return true;
             case "o":
-                if (event.ctrlKey) {
+                if (this.app.ctrlKey) {
                     this.app.tool = Tools.LOAD;
                     return true;
                 }
@@ -1232,8 +1246,8 @@ export class Vertedge {
                 this.app.tool = Tools.HELP;
                 return true;
             case "a":
-                if (event.ctrlKey) {
-                    if (event.shiftKey) {
+                if (this.app.ctrlKey) {
+                    if (this.app.shiftKey) {
                         this.deselectAll();
                     } else {
                         this.selectAll();
@@ -1242,7 +1256,6 @@ export class Vertedge {
                 }
                 return false;
             case "escape":
-                this.firstVertex = null;
                 this.deselectAll();
                 return true;
             case "backspace":
@@ -1341,11 +1354,11 @@ export class Vertedge {
     }
 
     elementAtCursor(): Vertex | Edge | null {
-        return this.elementAt(this.app.cursorPos) || (
+        return this.app.hoverPos && (this.elementAt(this.app.hoverPos) || (
             this.gridSettings().gridEnabled
-                ? this.elementAt(this.app.transform(this.snapToGrid(this.app.cursorWorldPos)), false)
+                ? this.elementAt(this.app.transform(this.snapToGrid(this.app.locate(this.app.hoverPos))), false)
                 : null
-        );
+        ));
     }
 
     selectAll(): void {
@@ -1388,7 +1401,7 @@ export class Vertedge {
             this.app.view.center.set(0, 0);
         }
 
-        this.app.update();
+        this.app.redraw();
     }
 
     fitCaptureTo(elements: (Vertex | Edge)[]): void {
@@ -1473,11 +1486,11 @@ export class Vertedge {
             area.h + 2 * config.resizeProximityPixels,
         );
 
-        if (broadArea.contains(this.app.cursorPos)) {
-            let de = Math.abs(area.xw - this.app.cursorPos.x);
-            let dw = Math.abs(area.x - this.app.cursorPos.x);
-            let ds = Math.abs(area.yh - this.app.cursorPos.y);
-            let dn = Math.abs(area.y - this.app.cursorPos.y);
+        if (this.app.hoverPos && broadArea.contains(this.app.hoverPos)) {
+            let de = Math.abs(area.xw - this.app.hoverPos.x);
+            let dw = Math.abs(area.x - this.app.hoverPos.x);
+            let ds = Math.abs(area.yh - this.app.hoverPos.y);
+            let dn = Math.abs(area.y - this.app.hoverPos.y);
             let region = BoxRegion.NONE;
             if (de <= config.resizeProximityPixels && de < dw) {
                 region |= BoxRegion.POSITIVE_X;
@@ -1580,7 +1593,7 @@ export class Vertedge {
         if (reset) {
             this.centerView();
         } else {
-            this.app.update();
+            this.app.redraw();
         }
     }
 
