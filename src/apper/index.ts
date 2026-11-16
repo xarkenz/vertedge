@@ -473,6 +473,7 @@ export class GraphicalEditor {
                 }
                 let { startState } = this.#currentGesture;
                 this.#currentGesture = viewGesture(pointer1, pointer2, this.#view);
+                this.#hoverPos = null;
                 if (this.dragCancelCallback?.(startState)) {
                     this.redraw();
                 }
