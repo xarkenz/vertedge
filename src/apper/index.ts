@@ -239,6 +239,9 @@ export class GraphicalEditor {
 
     set tool(tool: Tool | null) {
         if (this.#toolbar) {
+            if (this.#toolbar.tool != tool) {
+                this.invalidateDrag();
+            }
             this.#toolbar.tool = tool;
         }
     }
@@ -335,6 +338,17 @@ export class GraphicalEditor {
 
     focusCanvas(): void {
         this.#canvas.focus();
+    }
+
+    invalidateDrag(): void {
+        if (this.#currentGesture.type === "drag") {
+            let { startState } = this.#currentGesture;
+            this.#currentGesture = resetGesture();
+            this.#hoverPos = null;
+            if (this.dragCancelCallback?.(startState)) {
+                this.redraw();
+            }
+        }
     }
 
     #updateTitleWidth(): void {
