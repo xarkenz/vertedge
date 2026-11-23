@@ -118,6 +118,9 @@ export class Vertedge {
             element: Vertex | Edge,
             index: number,
         }[],
+        prevVertices: Vertex[],
+        prevEdges: Edge[],
+        prevSelection: (Vertex | Edge)[],
         captureArea: Rect | null,
         resizeBoxRegion: BoxRegion | null,
     } | null = null;
@@ -886,8 +889,14 @@ export class Vertedge {
             let canSelect = event.button !== 2 && this.app.tool !== Tools.MOVE && this.app.tool !== Tools.CAPTURE;
             let element = canSelect ? this.elementAtCursor() : null;
 
+            let prevVertices = this.vertices;
+            let prevEdges = this.edges;
+            let prevSelection = this.selection;
+
+            // TODO: Ideally no vertices or edges should be created or deleted when a drag starts
             if (this.app.tool === Tools.DRAW && event.button === 0) {
                 if (element instanceof Vertex) {
+                    this.edges = this.edges.slice();
                     if (this.firstVertex) {
                         this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
                     } else {
@@ -895,6 +904,11 @@ export class Vertedge {
                     }
                 }
                 else if (element instanceof Edge && !element.isLoop()) {
+                    // FIXME: We are intentionally altering the "prev" state
+                    // FIXME: here by not copying the vertices/edges arrays,
+                    // FIXME: since otherwise it's possible to leave dangling
+                    // FIXME: edges lying around. This wouldn't be a problem if
+                    // FIXME: the TODO above is followed.
                     element = this.splitEdgeAt(element, this.app.locate(event));
                     if (this.firstVertex) {
                         this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
@@ -904,6 +918,8 @@ export class Vertedge {
                     }
                 }
                 else {
+                    this.vertices = this.vertices.slice();
+                    this.edges = this.edges.slice();
                     let placed = new Vertex(this.snapToGrid(this.app.locate(event)));
                     this.vertices.push(placed);
                     element = placed;
@@ -917,6 +933,9 @@ export class Vertedge {
             }
             else if (this.app.tool === Tools.ERASE && event.button === 0) {
                 if (element) {
+                    this.vertices = this.vertices.slice();
+                    this.edges = this.edges.slice();
+                    this.selection = this.selection.slice();
                     if (!this.selection.includes(element)) {
                         this.selection = [element];
                     }
@@ -930,6 +949,7 @@ export class Vertedge {
                     this.selection = [];
                 }
             } else if (this.app.shiftKey) {
+                this.selection = this.selection.slice();
                 if (this.selection.includes(element)) {
                     this.selection.splice(this.selection.indexOf(element), 1);
                 } else {
@@ -960,6 +980,9 @@ export class Vertedge {
                 y: event.y,
                 view: this.app.view.copy(),
                 elements,
+                prevVertices,
+                prevEdges,
+                prevSelection,
                 captureArea: this.captureArea,
                 resizeBoxRegion: this.getResizeBoxRegion(),
             };
@@ -1200,6 +1223,9 @@ export class Vertedge {
 
         this.app.view.center.set(this.dragState.view.center);
         this.app.view.zoom = this.dragState.view.zoom;
+        this.vertices = this.dragState.prevVertices;
+        this.edges = this.dragState.prevEdges;
+        this.selection = this.dragState.prevSelection;
         this.captureArea = this.dragState.captureArea;
 
         this.dragState = null;
