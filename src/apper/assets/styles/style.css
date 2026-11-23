@@ -41,7 +41,6 @@
     position: absolute;
     width: 100%;
     height: 100%;
-    z-index: 0;
     animation: 1s apper-fade-in;
     touch-action: none;
 }
@@ -119,7 +118,6 @@
     width: 48px;
     height: 100%;
     transform: translateX(-48px);
-    z-index: 1;
     box-sizing: border-box;
     padding: 8px;
     padding-top: 56px;
@@ -131,14 +129,12 @@
     background: #444c;
     transition: transform 0.5s;
     animation: 0.5s apper-enter-from-left;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 .apper-toolbar.apper-shown {
     transform: translateX(0px);
-}
-
-.apper-toolbar.apper-shown ~ .apper-toolbar-toggler {
-    transform: rotate(180deg);
 }
 
 .apper-toolbutton, .apper-toolbar-toggler {
@@ -148,26 +144,38 @@
     border-radius: 50%;
     border: 2px solid #ccc0;
     box-sizing: border-box;
+    padding: 0;
+    font: inherit;
+    text-align: left;
     flex: 0 0;
-    z-index: 3;
     cursor: pointer;
     transition: background-color 0.25s, border-color 0.25s;
 }
 
-.apper-toolbutton img {
+.apper-toolbutton img, .apper-toolbar-toggler img {
     position: relative;
     left: -2px;
     top: -2px;
-    z-index: 2;
+    pointer-events: none;
 }
 
 .apper-toolbar-toggler {
     position: relative;
     left: 8px;
     top: 8px;
-    transform: rotate(0deg);
-    transition: background-color 0.25s, transform 0.5s;
+    transition: background-color 0.25s;
     animation: 0.5s apper-fade-in;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.apper-toolbar-toggler img {
+    transform: rotate(0deg);
+    transition: transform 0.5s;
+}
+
+.apper-toolbar.apper-shown ~ .apper-toolbar-toggler img {
+    transform: rotate(180deg);
 }
 
 .apper-toolbutton:hover, .apper-toolbar-toggler:hover {
@@ -195,7 +203,6 @@
     top: -38px;
     width: 0;
     height: 28px;
-    z-index: 3;
     background: #444c;
     border-radius: 0 14px 14px 0;
     line-height: 28px;
@@ -217,7 +224,7 @@
 }
 
 .apper-toolbutton:hover .apper-toolbutton-tip {
-    width: 100px;
+    width: 120px;
     opacity: 1;
     transition-delay: 0.5s;
 }
@@ -317,6 +324,8 @@
     opacity: 0.5;
     cursor: pointer;
     transition: opacity 0.25s;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 .apper-modal > .apper-close-button:hover {

@@ -713,7 +713,6 @@ export class Tool {
 export class Toolbar {
     #app: ApperApplication;
     #element: HTMLElement;
-    #toggler: HTMLElement;
     #buttons: HTMLElement[] = [];
     #tools: number[] = [];
     #tool: number = NaN;
@@ -733,12 +732,15 @@ export class Toolbar {
             this.#element.classList.add("apper-shown");
         }
 
+        let toggler = document.createElement("button");
+        toggler.className = "apper-toolbar-toggler";
+        toggler.ariaLabel = "Show/Hide Toolbar";
+        toggler.addEventListener("click", this.toggleVisibility.bind(this));
         let togglerImg = document.createElement("img");
-        togglerImg.className = "apper-toolbar-toggler";
         togglerImg.src = icon_toolbarToggler;
-        togglerImg.addEventListener("click", () => this.toggleVisibility());
-        this.#toggler = togglerImg;
-        this.#app.element.appendChild(this.#toggler);
+        togglerImg.draggable = false;
+        toggler.appendChild(togglerImg);
+        this.#app.element.appendChild(toggler);
     }
 
     get tool(): Tool | null {
@@ -788,8 +790,9 @@ export class Toolbar {
             this.#tool = this.#defaultTool = tool.id;
         }
 
-        let button = document.createElement("div");
+        let button = document.createElement("button");
         button.className = "apper-toolbutton";
+        button.ariaLabel = tool.displayName;
         if (this.#tool === tool.id) {
             button.classList.add("apper-button-selected");
         }
@@ -804,10 +807,13 @@ export class Toolbar {
 
         let icon = document.createElement("img");
         icon.src = tool.icon;
+        icon.draggable = false;
         button.appendChild(icon);
 
         let tip = document.createElement("div");
         tip.className = "apper-toolbutton-tip";
+        tip.role = "tooltip";
+        button.ariaDescribedByElements = [tip];
         tip.textContent = tool.displayName;
         button.appendChild(tip);
 
@@ -929,6 +935,7 @@ export class Modal {
         let closeButton = document.createElement("img");
         closeButton.className = "apper-close-button";
         closeButton.src = icon_closeButton;
+        closeButton.draggable = false;
         closeButton.addEventListener("click", () => {
             this.hide();
             let toolbar = this.app.toolbar;
