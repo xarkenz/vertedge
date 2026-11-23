@@ -106,7 +106,6 @@ export class Vertedge {
     vertices: Vertex[] = [];
     edges: Edge[] = [];
     selection: (Vertex | Edge)[] = [];
-    firstVertex: Vertex | null = null;
     color: string = "";
     captureArea: Rect | null = null;
     dragState: {
@@ -121,6 +120,7 @@ export class Vertedge {
         prevVertices: Vertex[],
         prevEdges: Edge[],
         prevSelection: (Vertex | Edge)[],
+        drawFromVertex: Vertex | null,
         captureArea: Rect | null,
         resizeBoxRegion: BoxRegion | null,
     } | null = null;
@@ -411,10 +411,6 @@ export class Vertedge {
             : this.app.tool === Tools.ERASE ? Color.RED
             : Color.PURPLE;
         let resizeBoxRegion = this.app.tool === Tools.CAPTURE ? this.getResizeBoxRegion() : null;
-
-        if (this.app.tool !== Tools.DRAW) {
-            this.firstVertex = null;
-        }
 
         if (this.app.tool === Tools.STYLE && this.selection.length) {
             if (this.selection.some(element => element instanceof Vertex)) {
@@ -757,7 +753,7 @@ export class Vertedge {
             this.app.ctx.stroke();
         }
         else if (this.app.tool === Tools.DRAW && this.app.hoverPos) {
-            let drawingLoop = this.firstVertex && this.app.ctrlKey;
+            let drawingLoop = this.dragState?.drawFromVertex && this.app.ctrlKey;
             let pos = gridEnabled ? this.app.transform(this.snapToGrid(this.app.locate(this.app.hoverPos))) : this.app.hoverPos;
             // Draw vertex preview
             this.app.ctx.fillStyle = `${this.color}aa`;
@@ -800,10 +796,10 @@ export class Vertedge {
                 this.app.ctx.stroke();
             }
             // Draw edge preview, if applicable
-            if (this.firstVertex) {
+            if (this.dragState?.drawFromVertex) {
                 this.app.ctx.setLineDash([5, 5]);
                 this.app.ctx.beginPath();
-                let start = this.app.transform(this.firstVertex);
+                let start = this.app.transform(this.dragState.drawFromVertex);
                 if (drawingLoop) {
                     // Draw loop preview
                     let radius = 0.5 * Math.hypot(pos.x - start.x, pos.y - start.y);
@@ -888,6 +884,7 @@ export class Vertedge {
         if (event.button === 0 || event.button === 2) {
             let canSelect = event.button !== 2 && this.app.tool !== Tools.MOVE && this.app.tool !== Tools.CAPTURE;
             let element = canSelect ? this.elementAtCursor() : null;
+            let drawFromVertex: Vertex | null = null;
 
             let prevVertices = this.vertices;
             let prevEdges = this.edges;
@@ -897,11 +894,6 @@ export class Vertedge {
             if (this.app.tool === Tools.DRAW && event.button === 0) {
                 if (element instanceof Vertex) {
                     this.edges = this.edges.slice();
-                    if (this.firstVertex) {
-                        this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
-                    } else {
-                        this.firstVertex = element;
-                    }
                 }
                 else if (element instanceof Edge && !element.isLoop()) {
                     // FIXME: We are intentionally altering the "prev" state
@@ -910,12 +902,6 @@ export class Vertedge {
                     // FIXME: edges lying around. This wouldn't be a problem if
                     // FIXME: the TODO above is followed.
                     element = this.splitEdgeAt(element, this.app.locate(event));
-                    if (this.firstVertex) {
-                        this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
-                        this.firstVertex = null;
-                    } else {
-                        this.firstVertex = element;
-                    }
                 }
                 else {
                     this.vertices = this.vertices.slice();
@@ -923,13 +909,8 @@ export class Vertedge {
                     let placed = new Vertex(this.snapToGrid(this.app.locate(event)));
                     this.vertices.push(placed);
                     element = placed;
-                    if (this.firstVertex && this.firstVertex !== element) {
-                        this.edges.push(new Edge({v1: this.firstVertex, v2: placed}));
-                        this.firstVertex = null;
-                    } else {
-                        this.firstVertex = element;
-                    }
                 }
+                drawFromVertex = element;
             }
             else if (this.app.tool === Tools.ERASE && event.button === 0) {
                 if (element) {
@@ -983,6 +964,7 @@ export class Vertedge {
                 prevVertices,
                 prevEdges,
                 prevSelection,
+                drawFromVertex,
                 captureArea: this.captureArea,
                 resizeBoxRegion: this.getResizeBoxRegion(),
             };
@@ -1038,7 +1020,7 @@ export class Vertedge {
             for (let { element, index } of this.dragState.elements) {
                 let vertex, edge;
                 if (element instanceof Vertex && (vertex = this.vertices[index])) {
-                    if (this.app.tool !== Tools.DRAW || !this.firstVertex) {
+                    if (this.app.tool !== Tools.DRAW || !this.dragState.drawFromVertex) {
                         let p = revert ? new Vector2(element) : this.snapToGrid(new Vector2(element).add(dx / this.app.view.zoom, dy / this.app.view.zoom));
                         vertex.x = p.x;
                         vertex.y = p.y;
@@ -1085,19 +1067,19 @@ export class Vertedge {
         let element = this.dragState.button === 2 || this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAtCursor();
 
         if (this.app.tool === Tools.DRAW) {
-            if (this.firstVertex && this.firstVertex !== element) {
+            if (this.dragState.drawFromVertex && this.dragState.drawFromVertex !== element) {
                 if (this.app.ctrlKey) {
-                    let loop = new Edge({v1: this.firstVertex, v2: this.firstVertex, cp: this.snapToGrid(this.app.locate(finalPos))});
+                    let loop = new Edge({v1: this.dragState.drawFromVertex, cp: this.snapToGrid(this.app.locate(finalPos))});
                     this.edges.push(loop);
                     this.selection = [loop];
                 } else {
                     if (element instanceof Vertex) {
-                        this.edges.push(new Edge({v1: this.firstVertex, v2: element}));
+                        this.edges.push(new Edge({v1: this.dragState.drawFromVertex, v2: element}));
                         this.selection = [element];
                     } else if (element instanceof Edge && !element.isLoop()) {
                         let pos = this.app.locate(finalPos);
                         let v2 = this.splitEdgeAt(element, pos);
-                        this.edges.push(new Edge({v1: this.firstVertex, v2}));
+                        this.edges.push(new Edge({v1: this.dragState.drawFromVertex, v2}));
                     } else {
                         let pos = this.snapToGrid(this.app.locate(finalPos));
                         // Prevent creating duplicate vertices in the same position (e.g. when grid snapping is enabled)
@@ -1106,12 +1088,11 @@ export class Vertedge {
                             v2 = new Vertex(pos);
                             this.vertices.push(v2);
                         }
-                        this.edges.push(new Edge({v1: this.firstVertex, v2}));
+                        this.edges.push(new Edge({v1: this.dragState.drawFromVertex, v2}));
                         this.selection = [v2];
                     }
                 }
             }
-            this.firstVertex = null;
         }
         else if (this.app.tool === Tools.CAPTURE && this.captureArea && this.dragState.resizeBoxRegion) {
             this.captureArea = this.captureArea.normalized();
@@ -1212,7 +1193,7 @@ export class Vertedge {
         for (let { element, index } of this.dragState.elements) {
             let vertex, edge;
             if (element instanceof Vertex && (vertex = this.vertices[index])) {
-                if (this.app.tool !== Tools.DRAW || !this.firstVertex) {
+                if (this.app.tool !== Tools.DRAW || !this.dragState.drawFromVertex) {
                     vertex.x = element.x;
                     vertex.y = element.y;
                 }
@@ -1229,7 +1210,6 @@ export class Vertedge {
         this.captureArea = this.dragState.captureArea;
 
         this.dragState = null;
-        this.firstVertex = null;
         return true;
     }
 
