@@ -189,12 +189,13 @@ export class Edge {
         let { v1, v2, cp, ...rest } = this;
         let data: EdgeDescriptor = rest;
         if (v1) {
-            data.v1 = v1;
+            data.v1 = v1.copy();
         }
-        if (v2 && v2 != v1) {
-            data.v2 = v2;
+        if (v2 && v2 !== v1) {
+            data.v2 = v2.copy();
         }
         if (cp) {
+            // Gets copied inside the constructor, no need to do it here.
             data.cp = cp;
         }
         return new Edge(data);
