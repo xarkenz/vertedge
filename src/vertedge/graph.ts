@@ -1,26 +1,27 @@
 import { Vector2, Viewport, type Vector2Like } from "@/apper/math";
-import { Color } from "@/vertedge/util";
+import { Color, type GraphDrawingContext } from "@/vertedge/util";
 
 export interface VertexShape {
     id: number;
     sizeFactor: number;
 
-    path(ctx: CanvasRenderingContext2D, pos: Vector2Like, radius: number): void;
+    path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number): void;
 }
 
 export const VertexShape = {
     CIRCLE: Object.freeze({
         id: 0,
         sizeFactor: 1,
-        path(ctx: CanvasRenderingContext2D, pos: Vector2Like, radius: number) {
+        path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
             radius *= this.sizeFactor;
             ctx.ellipse(pos.x, pos.y, radius, radius, 0, 0, 2 * Math.PI);
+            ctx.closePath();
         },
     }),
     SQUARE: Object.freeze({
         id: 1,
         sizeFactor: 1,
-        path(ctx: CanvasRenderingContext2D, pos: Vector2Like, radius: number) {
+        path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
             radius *= this.sizeFactor;
             ctx.rect(pos.x - radius, pos.y - radius, 2 * radius, 2 * radius);
         },
@@ -28,7 +29,7 @@ export const VertexShape = {
     DIAMOND: Object.freeze({
         id: 2,
         sizeFactor: 1.3,
-        path(ctx: CanvasRenderingContext2D, pos: Vector2Like, radius: number) {
+        path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
             radius *= this.sizeFactor;
             ctx.moveTo(pos.x, pos.y - radius);
             ctx.lineTo(pos.x - radius, pos.y);
@@ -40,7 +41,7 @@ export const VertexShape = {
     STAR: Object.freeze({
         id: 3,
         sizeFactor: 1.3,
-        path(ctx: CanvasRenderingContext2D, pos: Vector2Like, radius: number) {
+        path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
             radius *= this.sizeFactor;
             ctx.moveTo(pos.x, pos.y - radius);
             ctx.lineTo(pos.x - 0.29 * radius, pos.y - 0.40 * radius);
@@ -106,12 +107,12 @@ export class Vertex {
         return this.shape.sizeFactor * this.r + 0.5 * this.lineWidth;
     }
 
-    path(ctx: CanvasRenderingContext2D, view: Viewport = new Viewport()): void {
+    path(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
         this.r = Math.abs(this.r);
         this.shape.path(ctx, view.transform(this), this.r * view.zoom);
     }
 
-    draw(ctx: CanvasRenderingContext2D, hover: boolean, select: boolean, highlight: string, view: Viewport = new Viewport()): void {
+    draw(ctx: GraphDrawingContext, hover: boolean, select: boolean, highlight: string, view: Viewport = new Viewport()): void {
         this.r = Math.abs(this.r);
         if (hover || select) {
             ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
@@ -219,7 +220,7 @@ export class Edge {
         [this.v1, this.v2] = [this.v2, this.v1];
     }
 
-    path(ctx: CanvasRenderingContext2D, view: Viewport = new Viewport()): void {
+    path(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
         if (!this.v1 || !this.v2) return;
         let v1 = view.transform(this.v1);
         let v2 = view.transform(this.v2);
@@ -240,7 +241,7 @@ export class Edge {
         }
     }
 
-    pathArrow(ctx: CanvasRenderingContext2D, view: Viewport = new Viewport()): void {
+    pathArrow(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
         if (!this.v1 || !this.v2) return;
         let v1 = view.transform(this.v1);
         let v2 = view.transform(this.v2);
@@ -286,7 +287,7 @@ export class Edge {
         ctx.lineTo(tip.x + len * (dir.x * cos + dir.y * sin), tip.y + len * (dir.y * cos - dir.x * sin));
     }
 
-    draw(ctx: CanvasRenderingContext2D, hover: boolean, select: boolean, highlight: string, view: Viewport = new Viewport()): void {
+    draw(ctx: GraphDrawingContext, hover: boolean, select: boolean, highlight: string, view: Viewport = new Viewport()): void {
         if (!this.v1 || !this.v2) return;
         if (hover || select) {
             ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;

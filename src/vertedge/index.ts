@@ -34,6 +34,7 @@ import { Color, getFillColorIcon, getStrokeColorIcon, linesIntersect, nearestOnL
 import { Button, ButtonList, CanvasImage, Checkbox, FileInput, HSpread, NumberInput, Paragraph, TextEditor } from "@/apper/widget";
 import { BoxRegion, getResizeCursor } from "@/apper/util";
 import { Rect, Vector2, Viewport, type Vector2Like } from "@/apper/math";
+import { SVGGraphDrawingContext } from "./svg";
 
 export const config = {
     curveSamplingInterval: 0.01,
@@ -150,7 +151,8 @@ export class Vertedge {
     capture_fitGraph: Button;
     capture_emptyPreview: Paragraph;
     capture_preview: CanvasImage;
-    capture_download: Button;
+    capture_downloadPNG: Button;
+    capture_downloadSVG: Button;
 
     saveModal: Modal;
     save_download: Button;
@@ -308,7 +310,8 @@ export class Vertedge {
             .addSeparator()
             .add(this.capture_emptyPreview = new Paragraph("An image preview will appear here."))
             .add(this.capture_preview = new CanvasImage("Preview:").hide())
-            .add(this.capture_download = new Button(`<img src="${icon_download}"> Download as PNG`).hide());
+            .add(this.capture_downloadPNG = new Button(`<img src="${icon_download}"> Download as PNG (bitmap image)`).hide())
+            .add(this.capture_downloadSVG = new Button(`<img src="${icon_download}"> Download as SVG (vector image)`).hide());
         
         this.saveModal = this.app.addModal("Save Graph")
             .addSeparator()
@@ -558,10 +561,12 @@ export class Vertedge {
                 this.capture_selectionOnly.hide();
                 this.capture_fitGraph.hide();
                 this.capture_preview.hide();
-                this.capture_download.hide();
-
-                this.capture_download.url = "";
-                this.capture_download.filename = "";
+                this.capture_downloadPNG.hide();
+                this.capture_downloadPNG.url = "";
+                this.capture_downloadPNG.filename = "";
+                this.capture_downloadSVG.hide();
+                this.capture_downloadSVG.url = "";
+                this.capture_downloadSVG.filename = "";
             } else {
                 this.capture_prompt.hide();
                 this.capture_emptyPreview.hide();
@@ -569,7 +574,8 @@ export class Vertedge {
                 this.capture_selectionOnly.show();
                 this.capture_fitGraph.show();
                 this.capture_preview.show();
-                this.capture_download.show();
+                this.capture_downloadPNG.show();
+                this.capture_downloadSVG.show();
 
                 if (this.selection.length > 0) {
                     this.capture_selectionOnly.enable();
@@ -577,28 +583,41 @@ export class Vertedge {
                     this.capture_selectionOnly.disable().setChecked(false);
                 }
 
-                this.capture_preview.label = `Preview (${this.captureArea.w} \u00d7 ${this.captureArea.h}):`
-                this.capture_preview.resize(this.captureArea.w, this.captureArea.h);
+                let captureX = Math.floor(this.captureArea.x);
+                let captureY = Math.floor(this.captureArea.y);
+                let captureW = Math.ceil(this.captureArea.w);
+                let captureH = Math.ceil(this.captureArea.h);
+
+                this.capture_preview.label = `Preview (${captureW} \u00d7 ${captureH}):`
+                this.capture_preview.resize(captureW, captureH);
                 this.capture_preview.ctx.resetTransform();
-                this.capture_preview.ctx.clearRect(0, 0, this.capture_preview.canvas.width, this.capture_preview.canvas.height);
-                this.capture_preview.ctx.translate(-this.captureArea.x, -this.captureArea.y);
+                this.capture_preview.ctx.clearRect(0, 0, captureW, captureH);
+                this.capture_preview.ctx.translate(-captureX, -captureY);
                 this.capture_preview.ctx.lineCap = "round";
                 this.capture_preview.ctx.lineJoin = "round";
+
+                let svgCtx = new SVGGraphDrawingContext(captureX, captureY, captureW, captureH);
+                svgCtx.lineCap = "round";
+                svgCtx.lineJoin = "round";
 
                 // TODO: users should be able to modify resolution through capture menu
                 this.edges.forEach(edge => {
                     if (!this.capture_selectionOnly.checked || this.selection.includes(edge)) {
                         edge.draw(this.capture_preview.ctx, false, false, this.color);
+                        edge.draw(svgCtx, false, false, this.color);
                     }
                 });
                 this.vertices.forEach(vertex => {
                     if (!this.capture_selectionOnly.checked || this.selection.includes(vertex)) {
                         vertex.draw(this.capture_preview.ctx, false, false, this.color);
+                        vertex.draw(svgCtx, false, false, this.color);
                     }
                 });
 
-                this.capture_download.url = this.capture_preview.canvas.toDataURL("image/png");
-                this.capture_download.filename = `${this.app.title}.png`;
+                this.capture_downloadPNG.url = this.capture_preview.canvas.toDataURL("image/png");
+                this.capture_downloadPNG.filename = `${this.app.title}.png`;
+                this.capture_downloadSVG.url = svgCtx.toDataURL();
+                this.capture_downloadSVG.filename = `${this.app.title}.svg`;
             }
 
             this.capturePanel.show();
@@ -606,8 +625,10 @@ export class Vertedge {
             this.capturePanel.hide();
             
             this.captureArea = null;
-            this.capture_download.url = "";
-            this.capture_download.filename = "";
+            this.capture_downloadPNG.url = "";
+            this.capture_downloadPNG.filename = "";
+            this.capture_downloadSVG.url = "";
+            this.capture_downloadSVG.filename = "";
         }
 
         if (this.app.tool === Tools.LOAD) {

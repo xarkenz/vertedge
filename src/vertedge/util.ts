@@ -3,6 +3,32 @@ import icon_transparent from "./assets/icons/transparent.svg";
 import { Vector2, type Vector2Like } from "@/apper/math";
 import { config } from ".";
 
+export interface GraphDrawingContext {
+    fillStyle: string | CanvasGradient | CanvasPattern;
+    strokeStyle: string | CanvasGradient | CanvasPattern;
+    lineCap: CanvasLineCap;
+    lineDashOffset: number;
+    lineJoin: CanvasLineJoin;
+    lineWidth: number;
+    miterLimit: number;
+
+    getLineDash(): number[];
+    setLineDash(segments: number[]): void;
+
+    beginPath(): void;
+    fill(): void;
+    stroke(): void;
+
+    moveTo(x: number, y: number): void;
+    lineTo(x: number, y: number): void;
+    quadraticCurveTo(cpx: number, cpy: number, x: number, y: number): void;
+    bezierCurveTo(cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number): void;
+    closePath(): void;
+    rect(x: number, y: number, w: number, h: number): void;
+    ellipse(cx: number, cy: number, rx: number, ry: number, rotation: number, startAngle: number, endAngle: number, counterclockwise?: boolean): void;
+    arc(cx: number, cy: number, r: number, startAngle: number, endAngle: number, counterclockwise?: boolean): void;
+}
+
 // Position at t for quadratic beziér curve
 // (t²)r + (2t(1-t))q + ((1-t)²)p
 export function quadraticCurve(t: number, p: Vector2, q: Vector2, r: Vector2): Vector2 {
