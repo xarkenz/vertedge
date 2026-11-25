@@ -152,6 +152,7 @@ export class Rect {
     get xwy(): Vector2 { return new Vector2(this.x + this.w, this.y); }
     get xyh(): Vector2 { return new Vector2(this.x, this.y + this.h); }
     get xwyh(): Vector2 { return new Vector2(this.x + this.w, this.y + this.h); }
+    get center(): Vector2 { return new Vector2(this.cx, this.cy); }
 
     constructor(x: number, y: number, w: number, h: number) {
         this.#pos = new Vector2(x, y);

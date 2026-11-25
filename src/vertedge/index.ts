@@ -301,7 +301,7 @@ export class Vertedge {
                 .onChange(() => this.app.redraw()))
             .add(this.capture_fitGraph = new Button("Fit Entire Graph").hide()
                 .onClick(() => {
-                    this.fitCaptureTo(this.allElements());
+                    this.captureArea = this.getBoundingBox(this.allElements());
                     this.app.redraw();
                 }))
             .addSeparator()
@@ -541,9 +541,7 @@ export class Vertedge {
         }
 
         if (this.app.tool === Tools.CAPTURE) {
-            if (!this.captureArea) {
-                this.fitCaptureTo(this.selection.length > 0 ? this.selection : this.allElements());
-            }
+            this.captureArea ||= this.getBoundingBox(this.selection.length > 0 ? this.selection : this.allElements());
             if (!this.captureArea) {
                 this.capture_prompt.show();
                 this.capture_emptyPreview.show();
@@ -1288,7 +1286,9 @@ export class Vertedge {
             case "delete":
                 return this.deleteSelection();
             case ".":
-                this.centerView();
+                if (!this.dragState) {
+                    this.centerView(this.selection.length > 0 ? this.selection : this.allElements());
+                }
                 return true;
             case "+":
             case "=":
@@ -1414,92 +1414,73 @@ export class Vertedge {
         return true;
     }
 
-    centerView(): void {
-        if (this.vertices.length) {
-            let l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
-            this.vertices.forEach(vertex => {
-                if (vertex.x < l) l = vertex.x;
-                if (vertex.x > r) r = vertex.x;
-                if (vertex.y < t) t = vertex.y;
-                if (vertex.y > b) b = vertex.y;
-            });
-            this.app.view.center.set(0.5 * (l + r), 0.5 * (t + b));
-        } else {
-            this.app.view.center.set(0, 0);
-        }
-
-        this.app.redraw();
-    }
-
-    fitCaptureTo(elements: (Vertex | Edge)[]): void {
-        if (elements.length === 0) {
-            this.captureArea = null;
-            return;
-        }
-        elements = elements.flatMap(element => {
-            let toCapture = [element];
-            if (element instanceof Edge) {
-                if (element.v1 && !elements.includes(element.v1)) {
-                    toCapture.push(element.v1);
-                }
-                if (element.v2 && !elements.includes(element.v2)) {
-                    toCapture.push(element.v2);
-                }
-            }
-            return toCapture;
-        });
-
+    getBoundingBox(elements: (Vertex | Edge)[]): Rect | null {
         let minX = Infinity;
-        let maxX = -Infinity;
         let minY = Infinity;
+        let maxX = -Infinity;
         let maxY = -Infinity;
+
         elements.forEach(element => {
             let margin = element.margin();
+
             if (element instanceof Vertex) {
                 minX = Math.min(minX, element.x - margin);
-                maxX = Math.max(maxX, element.x + margin);
                 minY = Math.min(minY, element.y - margin);
+                maxX = Math.max(maxX, element.x + margin);
                 maxY = Math.max(maxY, element.y + margin);
             }
-            else if (element instanceof Edge && element.v1 && element.v2) {
-                if (element.cp && element.v1 !== element.v2) {
+            else if (element instanceof Edge) {
+                if (!element.cp) {
+                    // Straight edge
+                    minX = Math.min(minX, element.v1.x - margin, element.v2.x - margin);
+                    minY = Math.min(minY, element.v1.y - margin, element.v2.y - margin);
+                    maxX = Math.max(maxX, element.v1.x + margin, element.v2.x + margin);
+                    maxY = Math.max(maxY, element.v1.y + margin, element.v2.y + margin);
+                }
+                else if (element.v1 !== element.v2) {
                     // Curved edge
-                    if (element.cp.x < element.v1.x && element.cp.x < element.v2.x || element.cp.x > element.v1.x && element.cp.x > element.v2.x) {
-                        let vx = quadraticCurveVertexX(element.v1, element.cp, element.v2);
-                        if (vx - margin < minX) minX = vx - margin;
-                        if (vx + margin > maxX) maxX = vx + margin;
+                    if (element.cp.x < Math.min(element.v1.x, element.v2.x) || element.cp.x > Math.max(element.v1.x, element.v2.x)) {
+                        let vertexX = quadraticCurveVertexX(element.v1, element.cp, element.v2);
+                        minX = Math.min(minX, vertexX - margin);
+                        maxX = Math.max(maxX, vertexX + margin);
                     }
-                    if (element.cp.y < element.v1.y && element.cp.y < element.v2.y || element.cp.y > element.v1.y && element.cp.y > element.v2.y) {
-                        let vy = quadraticCurveVertexY(element.v1, element.cp, element.v2);
-                        if (vy - margin < minY) minY = vy - margin;
-                        if (vy + margin > maxY) maxY = vy + margin;
+                    if (element.cp.y < Math.min(element.v1.y, element.v2.y) || element.cp.y > Math.max(element.v1.y, element.v2.y)) {
+                        let vertexY = quadraticCurveVertexY(element.v1, element.cp, element.v2);
+                        minY = Math.min(minY, vertexY - margin);
+                        maxY = Math.max(maxY, vertexY + margin);
                     }
-                } else if (element.cp && element.v1 === element.v2) {
+                }
+                else {
                     // Edge loop
                     let center = element.cp.add(element.v1).mul(0.5);
-                    let radius = 0.5 * Math.hypot(element.cp.x - element.v1.x, element.cp.y - element.v1.y);
-                    if (center.x - radius - margin < minX) minX = center.x - radius - margin;
-                    if (center.x + radius + margin > maxX) maxX = center.x + radius + margin;
-                    if (center.y - radius - margin < minY) minY = center.y - radius - margin;
-                    if (center.y + radius + margin > maxY) maxY = center.y + radius + margin;
-                } else {
-                    // Straight edge
-                    if (element.v1.x - margin < minX) minX = element.v1.x - margin;
-                    if (element.v1.x + margin > maxX) maxX = element.v1.x + margin;
-                    if (element.v1.y - margin < minY) minY = element.v1.y - margin;
-                    if (element.v1.y + margin > maxY) maxY = element.v1.y + margin;
-                    if (element.v2.x - margin < minX) minX = element.v2.x - margin;
-                    if (element.v2.x + margin > maxX) maxX = element.v2.x + margin;
-                    if (element.v2.y - margin < minY) minY = element.v2.y - margin;
-                    if (element.v2.y + margin > maxY) maxY = element.v2.y + margin;
+                    let radius = 0.5 * Math.hypot(element.cp.x - element.v1.x, element.cp.y - element.v1.y) + margin;
+                    minX = Math.min(minX, center.x - radius);
+                    minY = Math.min(minY, center.y - radius);
+                    maxX = Math.max(maxX, center.x + radius);
+                    maxY = Math.max(maxY, center.y + radius);
                 }
             }
         });
-        minX = Math.round(minX);
-        minY = Math.round(minY);
-        maxX = Math.round(maxX);
-        maxY = Math.round(maxY);
-        this.captureArea = new Rect(minX, minY, maxX - minX, maxY - minY);
+
+        if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+            // Usually in this case the elements array is empty, so there is no
+            // bounding box.
+            return null;
+        }
+
+        minX = Math.floor(minX);
+        minY = Math.floor(minY);
+        maxX = Math.ceil(maxX);
+        maxY = Math.ceil(maxY);
+
+        return new Rect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    centerView(elements: (Vertex | Edge)[]): void {
+        let bounds = this.getBoundingBox(elements);
+        this.app.view.center.set(bounds ? bounds.center : 0);
+
+        this.app.redraw();
     }
 
     getResizeBoxRegion(): BoxRegion | null {
