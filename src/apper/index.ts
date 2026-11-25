@@ -179,6 +179,7 @@ export class GraphicalEditor {
         document.addEventListener("keyup", this.#handleKeyUp.bind(this), { capture: true, passive: true });
         document.fonts.addEventListener("loadingdone", this.#updateTitleWidth.bind(this), { passive: true });
 
+        this.#view.scale = window.devicePixelRatio;
         this.#handleResize();
     }
 
@@ -223,6 +224,17 @@ export class GraphicalEditor {
 
     get view(): Viewport {
         return this.#view;
+    }
+
+    get scale(): number {
+        return this.#view.scale;
+    }
+
+    set scale(scale: number) {
+        if (scale !== this.scale) {
+            this.#view.scale = scale;
+            this.#handleResize();
+        }
     }
 
     get hoverPos(): Vector2 | null {
@@ -418,13 +430,11 @@ export class GraphicalEditor {
     }
 
     #handleResize(): void {
-        let scale = window.devicePixelRatio;
-        this.#canvas.width = this.width * scale;
-        this.#canvas.height = this.height * scale;
+        this.#canvas.width = this.width * this.#view.scale;
+        this.#canvas.height = this.height * this.#view.scale;
         this.#ctx.resetTransform();
-        this.#ctx.scale(scale, scale);
+        this.#ctx.scale(this.#view.scale, this.#view.scale);
         this.#view.size.set(this.width, this.height);
-        this.#view.scale = scale;
 
         let info = {
             width: this.width,

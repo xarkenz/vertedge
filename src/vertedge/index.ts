@@ -17,6 +17,7 @@ import icon_move from "./assets/icons/move.svg";
 import icon_radius from "./assets/icons/radius.svg";
 import icon_save from "./assets/icons/save.svg";
 import icon_select from "./assets/icons/select.svg";
+import icon_settings from "./assets/icons/settings.svg";
 import icon_shape from "./assets/icons/shape.svg";
 import icon_shapeCircle from "./assets/icons/shape-circle.svg";
 import icon_shapeSquare from "./assets/icons/shape-square.svg";
@@ -69,6 +70,7 @@ const Tools = {
     DATA: new Tool("data", "View Data", icon_data),
     LOAD: new Tool("load", "Load", icon_load),
     SAVE: new Tool("save", "Save", icon_save, new Shortcut("s", { ctrl: true })),
+    SETTINGS: new Tool("settings", "Settings", icon_settings),
     HELP: new Tool("help", "Help", icon_help, new Shortcut("h")),
 };
 
@@ -162,6 +164,9 @@ export class Vertedge {
     dataPanel: Panel;
     data_editor: TextEditor;
 
+    settingsModal: Modal;
+    settings_useHiDPI: Checkbox;
+
     helpModal: Modal;
 
     constructor(element: HTMLElement) {
@@ -188,6 +193,7 @@ export class Vertedge {
             .addTool(Tools.LOAD)
             .addTool(Tools.SAVE)
             .addTool(Tools.DATA)
+            .addTool(Tools.SETTINGS)
             .addTool(Tools.HELP);
 
         this.stylePanel = this.app.addPanel("Element Style")
@@ -356,6 +362,11 @@ export class Vertedge {
                     this.app.redraw();
                 }));
 
+        this.settingsModal = this.app.addModal("Vertedge Settings")
+            .addSeparator()
+            .add(this.settings_useHiDPI = new Checkbox("vertedge-use-hi-dpi", "Use increased picture quality for HiDPI displays", true)
+                .onChange(value => this.app.scale = value ? window.devicePixelRatio : 1));
+
         this.helpModal = this.app.addModal("Vertedge Help")
             .addSeparator()
             .add(new Paragraph("Hi! I built this in my spare time a while back, so I hope you'll understand that this is still a bit rough around the <i>edges</i> (pun intended)."))
@@ -372,6 +383,7 @@ export class Vertedge {
             .add(new Paragraph(`<img class="vertedge-help-tool-icon" src="${icon_load}"><b>Load</b> - <kbd>Ctrl</kbd>/<kbd>⌘Cmd</kbd> <kbd>O</kbd><br>This menu allows you to load a graph either from a file on your device or from the list of examples.`))
             .add(new Paragraph(`<img class="vertedge-help-tool-icon" src="${icon_save}"><b>Save</b> - <kbd>Ctrl</kbd>/<kbd>⌘Cmd</kbd> <kbd>S</kbd><br>This menu allows you to save the current graph to a file on your device. Unfortunately, cloud saving is not supported. Maybe someday.`))
             .add(new Paragraph(`<img class="vertedge-help-tool-icon" src="${icon_data}"><b>View Data</b><br>This menu contains the raw JSON data for the graph. You can mess around with it if you like, and the graph will update dynamically. Usually, you won't need to use this.`))
+            .add(new Paragraph(`<img class="vertedge-help-tool-icon" src="${icon_settings}"><b>Settings</b><br>This menu contains settings for the Vertedge application as a whole. At the moment, these settings are not saved; this functionality will (hopefully) be added in the future.`))
             .add(new Paragraph(`<img class="vertedge-help-tool-icon" src="${icon_help}"><b>Help</b> - <kbd>H</kbd><br>You are here. Congratulations!`))
             .addSeparator()
             .add(new Paragraph(`<b>Zoom In</b> - <kbd>+</kbd><br>Zoom in to the graph by a fixed amount.`))
@@ -395,20 +407,7 @@ export class Vertedge {
         return vertices.concat(this.edges);
     }
 
-    isDragMode() {
-        return !!this.dragState;
-    }
-
-    gridSettings() {
-        return {
-            axesVisible: this.grid_enableAxes.checked,
-            gridEnabled: this.grid_enableGrid.checked,
-            xStep: this.grid_gridStepX.value,
-            yStep: this.grid_gridStepY.value,
-        };
-    }
-
-    render() {
+    render(): void {
         let element = this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAtCursor();
         this.color = this.app.tool === Tools.DRAW ? Color.GREEN_DARK
             : this.app.tool === Tools.ERASE ? Color.RED
@@ -660,6 +659,12 @@ export class Vertedge {
             this.dataPanel.hide();
         }
 
+        if (this.app.tool === Tools.SETTINGS) {
+            this.settingsModal.show();
+        } else {
+            this.settingsModal.hide();
+        }
+
         if (this.app.tool === Tools.HELP) {
             this.helpModal.show();
         } else {
@@ -683,8 +688,11 @@ export class Vertedge {
         this.app.ctx.lineJoin = "round";
 
         // Draw grid and/or axes
-        let { axesVisible, gridEnabled, xStep, yStep } = this.gridSettings();
+        let axesVisible = this.grid_enableAxes.checked;
+        let gridEnabled = this.grid_enableGrid.checked;
         if (gridEnabled || axesVisible) {
+            let xStep = this.grid_gridStepX.value;
+            let yStep = this.grid_gridStepY.value;
             let topLeft = this.app.locate(new Vector2(0, 0))
             let bottomRight = this.app.locate(new Vector2(this.app.width, this.app.height));
             let startX = this.app.transformX(Math.floor(topLeft.x / xStep) * xStep);
@@ -1059,7 +1067,7 @@ export class Vertedge {
                             this.app.ctx.beginPath();
                             this.app.ctx.moveTo(this.app.transformX(edge.v1.x), this.app.transformY(edge.v1.y));
                             this.app.ctx.lineTo(this.app.transformX(edge.v2.x), this.app.transformY(edge.v2.y));
-                            if (this.app.ctx.isPointInStroke(this.app.transformX(edge.cp.x) * this.app.view.scale, this.app.transformY(edge.cp.y) * this.app.view.scale)) {
+                            if (this.app.ctx.isPointInStroke(this.app.transformX(edge.cp.x) * this.app.scale, this.app.transformY(edge.cp.y) * this.app.scale)) {
                                 edge.cp = null;
                             }
                         }
@@ -1308,8 +1316,9 @@ export class Vertedge {
     }
 
     snapToGrid(pos: Vector2Like): Vector2 {
-        let { gridEnabled, xStep, yStep } = this.gridSettings();
-        if (gridEnabled) {
+        if (this.grid_enableGrid.checked) {
+            let xStep = this.grid_gridStepX.value;
+            let yStep = this.grid_gridStepY.value;
             return new Vector2(Math.round(pos.x / xStep) * xStep, Math.round(pos.y / yStep) * yStep);
         } else {
             return new Vector2(pos);
@@ -1382,7 +1391,7 @@ export class Vertedge {
 
     elementAtCursor(): Vertex | Edge | null {
         return this.app.hoverPos && (this.elementAt(this.app.hoverPos) || (
-            this.gridSettings().gridEnabled
+            this.grid_enableGrid.checked
                 ? this.elementAt(this.app.transform(this.snapToGrid(this.app.locate(this.app.hoverPos))), false)
                 : null
         ));

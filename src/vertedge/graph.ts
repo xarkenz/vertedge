@@ -9,7 +9,7 @@ export interface VertexShape {
 }
 
 export const VertexShape = {
-    CIRCLE: Object.freeze({
+    CIRCLE: {
         id: 0,
         sizeFactor: 1,
         path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
@@ -17,16 +17,16 @@ export const VertexShape = {
             ctx.ellipse(pos.x, pos.y, radius, radius, 0, 0, 2 * Math.PI);
             ctx.closePath();
         },
-    }),
-    SQUARE: Object.freeze({
+    },
+    SQUARE: {
         id: 1,
         sizeFactor: 1,
         path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
             radius *= this.sizeFactor;
             ctx.rect(pos.x - radius, pos.y - radius, 2 * radius, 2 * radius);
         },
-    }),
-    DIAMOND: Object.freeze({
+    },
+    DIAMOND: {
         id: 2,
         sizeFactor: 1.3,
         path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
@@ -37,8 +37,8 @@ export const VertexShape = {
             ctx.lineTo(pos.x + radius, pos.y);
             ctx.closePath();
         },
-    }),
-    STAR: Object.freeze({
+    },
+    STAR: {
         id: 3,
         sizeFactor: 1.3,
         path(ctx: GraphDrawingContext, pos: Vector2Like, radius: number) {
@@ -55,7 +55,7 @@ export const VertexShape = {
             ctx.lineTo(pos.x + 0.29 * radius, pos.y - 0.40 * radius);
             ctx.closePath();
         },
-    }),
+    },
 };
 
 const vertexShapesByID: Record<number, VertexShape> = {};
