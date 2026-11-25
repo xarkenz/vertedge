@@ -68,7 +68,7 @@ const Tools = {
     GRID: new Tool("grid", "Grid", icon_grid, new Shortcut("g")),
     CAPTURE: new Tool("capture", "Capture", icon_capture),
     DATA: new Tool("data", "View Data", icon_data),
-    LOAD: new Tool("load", "Load", icon_load),
+    LOAD: new Tool("load", "Load", icon_load, new Shortcut("o", { ctrl: true })),
     SAVE: new Tool("save", "Save", icon_save, new Shortcut("s", { ctrl: true })),
     SETTINGS: new Tool("settings", "Settings", icon_settings),
     HELP: new Tool("help", "Help", icon_help, new Shortcut("h")),
