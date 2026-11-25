@@ -46,7 +46,11 @@ This menu allows you to save the current graph to a file on your device. Unfortu
 
 ### View Data
 
-This menu contains the raw JSON data for the graph. You can mess around with it if you like, and the graph will update dynamically. Usually, you won't need to use this
+This menu contains the raw JSON data for the graph. You can mess around with it if you like, and the graph will update dynamically. Usually, you won't need to use this.
+
+### Settings
+
+This menu contains settings for the Vertedge application as a whole. At the moment, these settings are not saved; this functionality will (hopefully) be added in the future.
 
 ### Help (<kbd>H</kbd>)
 
