@@ -28,23 +28,44 @@ import icon_style from "./assets/icons/style.svg";
 import icon_upload from "./assets/icons/upload.svg";
 import icon_width from "./assets/icons/width.svg";
 
-import * as zod from "zod";
 import { GraphicalEditor, Modal, Panel, Shortcut, Tool, type ApperDragEvent, type ApperKeyEvent, type ApperWheelEvent } from "@/apper";
-import { Edge, getVertexShapeByID, Vertex, VertexShape, type EdgeDescriptor } from "./graph";
+import { Edge, getVertexShapeByID, graphSchema, Vertex, VertexShape, type EdgeDescriptor } from "./graph";
 import { Color, getFillColorIcon, getStrokeColorIcon, linesIntersect, nearestOnLineSegment, nearestOnQuadraticCurve, quadraticCurve, quadraticCurveVertexX, quadraticCurveVertexY } from "./util";
 import { Button, ButtonList, CanvasImage, Checkbox, FileInput, HSpread, NumberInput, Paragraph, TextEditor } from "@/apper/widget";
 import { BoxRegion, getResizeCursor } from "@/apper/util";
 import { Rect, Vector2, Viewport, type Vector2Like } from "@/apper/math";
 import { SVGGraphDrawingContext } from "./svg";
 
+// TODO: Many of these should be global settings, not internal config
 export const config = {
+    currentVersion: 1,
     curveSamplingInterval: 0.01,
     revertProximityPixels: 8,
     resizeProximityPixels: 12,
     straightenCurveRadius: 20,
     scrollZoomMultiplier: 0.0005,
     keyZoomAmount: 0.1,
-    defaultLineDash: [2, 2],
+    defaults: {
+        grid: {
+            stepX: 50,
+            stepY: 50,
+        },
+        vertex: {
+            radius: 10,
+            fill: Color.DARK,
+            stroke: Color.LIGHT,
+            lineWidth: 4,
+            lineDash: [2, 2], // Only if line dash enabled.
+            shape: VertexShape.CIRCLE,
+        },
+        edge: {
+            stroke: Color.DARK,
+            lineWidth: 4,
+            lineDash: [2, 2], // Only if line dash enabled.
+            arrowAngle: 30,
+            arrowLength: 20,
+        },
+    },
 };
 
 const colorOptions: string[] = [
@@ -73,36 +94,6 @@ const Tools = {
     SETTINGS: new Tool("settings", "Settings", icon_settings),
     HELP: new Tool("help", "Help", icon_help, new Shortcut("h")),
 };
-
-// TODO: better validation
-const colorSchema = zod.string();
-const lineDashSchema = zod.array(zod.number());
-const jsonVector2Schema = zod.tuple([zod.number(), zod.number()]);
-
-const graphSchema = zod.object({
-    title: zod.string().nonempty().optional(),
-    vertices: zod.array(zod.object({
-        x: zod.number(),
-        y: zod.number(),
-        r: zod.number().optional(),
-        fill: colorSchema.optional(),
-        stroke: colorSchema.optional(),
-        lineWidth: zod.number().optional(),
-        lineDash: lineDashSchema.optional(),
-        shape: zod.int().nonnegative().optional(),
-    })).optional(),
-    edges: zod.array(zod.object({
-        v1: zod.int().nonnegative(),
-        v2: zod.int().nonnegative(),
-        cp: jsonVector2Schema.optional(),
-        stroke: colorSchema.optional(),
-        lineWidth: zod.number().optional(),
-        lineDash: lineDashSchema.optional(),
-        directed: zod.boolean().optional(),
-        arrowAngle: zod.number().optional(),
-        arrowLength: zod.number().optional(),
-    })).optional(),
-});
 
 export class Vertedge {
     app: GraphicalEditor;
@@ -249,7 +240,7 @@ export class Vertedge {
             .add(this.style_lineDash = new Checkbox("vertedge-line-dash", "Dashed line")
                 .onChange(value => {
                     this.selection.forEach(element => {
-                        element.lineDash = value ? config.defaultLineDash : [];
+                        element.lineDash = value ? config.defaults.vertex.lineDash : [];
                     });
                     this.app.redraw();
                 }))
@@ -318,7 +309,7 @@ export class Vertedge {
             .add(this.capture_preview = new CanvasImage("Preview:").hide())
             .add(this.capture_downloadPNG = new Button(`<img src="${icon_download}"> Download as PNG (bitmap image)`).hide())
             .add(this.capture_downloadSVG = new Button(`<img src="${icon_download}"> Download as SVG (vector image)`).hide());
-        
+
         this.saveModal = this.app.addModal("Save Graph")
             .addSeparator()
             .add(new Paragraph("Save the state of your graph to a file on your device:"))
@@ -462,7 +453,7 @@ export class Vertedge {
                         }
                     }
                 }
-                this.style_vertexRadius.value = radius ?? new Vertex().r;
+                this.style_vertexRadius.value = radius ?? config.defaults.vertex.radius;
             } else {
                 this.style_fillColor.hide();
                 this.style_vertexShape.hide();
@@ -488,7 +479,7 @@ export class Vertedge {
                         }
                     }
                 }
-                this.style_arrowAngle.value = arrowAngle ?? new Edge().arrowAngle;
+                this.style_arrowAngle.value = arrowAngle ?? config.defaults.edge.arrowAngle;
 
                 let arrowLength = undefined;
                 for (let element of this.selection) {
@@ -501,7 +492,7 @@ export class Vertedge {
                         }
                     }
                 }
-                this.style_arrowLength.value = arrowLength ?? new Edge().arrowLength;
+                this.style_arrowLength.value = arrowLength ?? config.defaults.edge.arrowLength;
             } else {
                 this.style_edgeDirected.hide();
                 this.style_reverseEdge.hide();
@@ -1563,7 +1554,7 @@ export class Vertedge {
                 let searchParams = new URLSearchParams(window.location.search)
                 searchParams.set("src", url);
                 window.history.pushState(null, "", window.location.pathname + "?" + searchParams.toString());
-                this.loadFromData(data, true);
+                this.loadFromData(data);
                 this.app.showMessage("Successfully loaded the graph.", 3);
             })
             .catch(error => {
@@ -1592,7 +1583,7 @@ export class Vertedge {
                         throw new Error("reader.result is somehow null!");
                     }
                     let data = JSON.parse(reader.result as string);
-                    this.loadFromData(data, true);
+                    this.loadFromData(data);
                     this.app.showMessage("Successfully loaded the graph.", 3);
                 } catch (error) {
                     this.app.showError("An error occurred while loading the graph.");
@@ -1604,13 +1595,24 @@ export class Vertedge {
         reader.readAsText(file);
     }
 
-    loadFromData(data: unknown, reset: boolean = false): void {
+    loadFromData(data: unknown): void {
         let graph = graphSchema.parse(data);
+        let version = graph.version || 1;
 
         this.app.title = graph.title || this.app.defaultTitle();
+
+        this.app.view.cx = graph.view?.x ?? 0;
+        this.app.view.cy = graph.view?.y ?? 0;
+        this.app.view.zoom = graph.view?.zoom ?? 1;
+
+        this.grid_enableAxes.checked = !!graph.settings?.enableAxes;
+        this.grid_enableGrid.checked = !!graph.settings?.enableGrid;
+        this.grid_gridStepX.value = graph.settings?.gridStepX ?? config.defaults.grid.stepX;
+        this.grid_gridStepY.value = graph.settings?.gridStepY ?? config.defaults.grid.stepY;
+
         this.vertices = graph.vertices ? graph.vertices.map(vertex => new Vertex({
             ...vertex,
-            shape: (vertex.shape ? getVertexShapeByID(vertex.shape) : undefined) ?? VertexShape.CIRCLE,
+            shape: typeof vertex.shape === "number" ? getVertexShapeByID(vertex.shape) : undefined,
         })) : [];
         this.edges = graph.edges ? graph.edges.map(edge => {
             let v1 = this.vertices[edge.v1];
@@ -1626,39 +1628,47 @@ export class Vertedge {
             return new Edge(edgeData);
         }) : [];
 
-        if (reset) {
-            this.centerView();
-        } else {
-            this.app.redraw();
-        }
+        this.app.redraw();
     }
 
     getGraphData(): string {
-        let vertexDefault = new Vertex();
         let vertices = this.vertices.map(vertex => ({
-            x: vertex.x, y: vertex.y,
-            r: vertex.r === vertexDefault.r ? undefined : vertex.r,
-            fill: vertex.fill === vertexDefault.fill ? undefined : vertex.fill,
-            stroke: vertex.stroke === vertexDefault.stroke ? undefined : vertex.stroke,
-            lineWidth: vertex.lineWidth === vertexDefault.lineWidth ? undefined : vertex.lineWidth,
+            x: vertex.x,
+            y: vertex.y,
+            r: vertex.r === config.defaults.vertex.radius ? undefined : vertex.r,
+            fill: vertex.fill === config.defaults.vertex.fill ? undefined : vertex.fill,
+            stroke: vertex.stroke === config.defaults.vertex.stroke ? undefined : vertex.stroke,
+            lineWidth: vertex.lineWidth === config.defaults.vertex.lineWidth ? undefined : vertex.lineWidth,
             lineDash: !vertex.lineDash.length ? undefined : vertex.lineDash.slice(),
             shape: vertex.shape.id === 0 ? undefined : vertex.shape.id,
         }));
 
-        let edgeDefault = new Edge();
         let edges = this.edges.map(edge => ({
-            v1: edge.v1 && this.vertices.indexOf(edge.v1), v2: edge.v2 && this.vertices.indexOf(edge.v2),
+            v1: edge.v1 && this.vertices.indexOf(edge.v1),
+            v2: edge.v2 && (this.vertices.indexOf(edge.v2)),
             cp: edge.cp === null ? undefined : [edge.cp.x, edge.cp.y],
-            stroke: edge.stroke === edgeDefault.stroke ? undefined : edge.stroke,
-            lineWidth: edge.lineWidth === edgeDefault.lineWidth ? undefined : edge.lineWidth,
+            stroke: edge.stroke === config.defaults.edge.stroke ? undefined : edge.stroke,
+            lineWidth: edge.lineWidth === config.defaults.edge.lineWidth ? undefined : edge.lineWidth,
             lineDash: !edge.lineDash.length ? undefined : edge.lineDash.slice(),
             directed: !edge.directed ? undefined : edge.directed,
-            arrowAngle: edge.arrowAngle === edgeDefault.arrowAngle ? undefined : edge.arrowAngle,
-            arrowLength: edge.arrowLength === edgeDefault.arrowLength ? undefined : edge.arrowLength,
+            arrowAngle: edge.arrowAngle === config.defaults.edge.arrowAngle ? undefined : edge.arrowAngle,
+            arrowLength: edge.arrowLength === config.defaults.edge.arrowLength ? undefined : edge.arrowLength,
         }));
 
         return JSON.stringify({
+            version: config.currentVersion,
             title: this.app.title,
+            view: {
+                x: this.app.view.cx === 0 ? undefined : this.app.view.cx,
+                y: this.app.view.cy === 0 ? undefined : this.app.view.cy,
+                zoom: this.app.view.zoom === 1 ? undefined : this.app.view.zoom,
+            },
+            settings: {
+                enableAxes: this.grid_enableAxes.checked || undefined,
+                enableGrid: this.grid_enableGrid.checked || undefined,
+                gridStepX: this.grid_gridStepX.value === config.defaults.grid.stepX ? undefined : this.grid_gridStepX.value,
+                gridStepY: this.grid_gridStepY.value === config.defaults.grid.stepY ? undefined : this.grid_gridStepY.value,
+            },
             vertices,
             edges,
         });

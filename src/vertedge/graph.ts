@@ -1,5 +1,7 @@
+import * as zod from "zod";
 import { Vector2, Viewport, type Vector2Like } from "@/apper/math";
 import { Color, type GraphDrawingContext } from "@/vertedge/util";
+import { config } from ".";
 
 export interface VertexShape {
     id: number;
@@ -68,8 +70,8 @@ export function getVertexShapeByID(id: number): VertexShape | undefined {
 }
 
 export interface VertexDescriptor {
-    x?: number;
-    y?: number;
+    x: number;
+    y: number;
     r?: number;
     fill?: string;
     stroke?: string;
@@ -88,15 +90,15 @@ export class Vertex {
     lineDash: number[];
     shape: VertexShape;
 
-    constructor(data: VertexDescriptor | null = null) {
-        this.x = data?.x ?? 0;
-        this.y = data?.y ?? 0;
-        this.r = Math.abs(data?.r ?? 10);
-        this.fill = data?.fill ?? Color.DARK;
-        this.stroke = data?.stroke ?? Color.LIGHT;
-        this.lineWidth = Math.abs(data?.lineWidth ?? 4);
-        this.lineDash = (data?.lineDash || []).slice();
-        this.shape = data?.shape || VertexShape.CIRCLE;
+    constructor(data: VertexDescriptor) {
+        this.x = data.x;
+        this.y = data.y;
+        this.r = Math.abs(data.r ?? config.defaults.vertex.radius);
+        this.fill = data.fill ?? config.defaults.vertex.fill;
+        this.stroke = data.stroke ?? config.defaults.vertex.stroke;
+        this.lineWidth = Math.abs(data.lineWidth ?? config.defaults.vertex.lineWidth);
+        this.lineDash = (data.lineDash || []).slice();
+        this.shape = data.shape || config.defaults.vertex.shape;
     }
 
     copy(): Vertex {
@@ -151,7 +153,7 @@ export class Vertex {
 }
 
 export interface EdgeDescriptor {
-    v1?: Vertex;
+    v1: Vertex;
     v2?: Vertex;
     cp?: Vector2Like;
     stroke?: string;
@@ -163,8 +165,8 @@ export interface EdgeDescriptor {
 }
 
 export class Edge {
-    v1: Vertex | null;
-    v2: Vertex | null;
+    v1: Vertex;
+    v2: Vertex;
     cp: Vector2 | null;
     stroke: string;
     lineWidth: number;
@@ -173,25 +175,23 @@ export class Edge {
     arrowAngle: number;
     arrowLength: number;
 
-    constructor(data: EdgeDescriptor | null = null) {
-        this.v1 = data?.v1 || null;
-        this.v2 = data?.v2 || this.v1;
-        this.cp = (data && data.cp && new Vector2(data.cp)) || null;
-        this.stroke = data?.stroke ?? Color.DARK;
-        this.lineWidth = Math.abs(data?.lineWidth ?? 4);
-        this.lineDash = (data?.lineDash || []).slice();
-        this.directed = !!data?.directed;
-        this.arrowAngle = data?.arrowAngle ?? 30;
-        this.arrowLength = data?.arrowLength ?? 20;
+    constructor(data: EdgeDescriptor) {
+        this.v1 = data.v1 || null;
+        this.v2 = data.v2 || this.v1;
+        this.cp = (data.cp && new Vector2(data.cp)) || null;
+        this.stroke = data.stroke ?? config.defaults.edge.stroke;
+        this.lineWidth = Math.abs(data.lineWidth ?? config.defaults.edge.lineWidth);
+        this.lineDash = (data.lineDash || []).slice();
+        this.directed = !!data.directed;
+        this.arrowAngle = data.arrowAngle ?? config.defaults.edge.arrowAngle;
+        this.arrowLength = data.arrowLength ?? config.defaults.edge.arrowLength;
     }
 
     copy(): Edge {
-        let { v1, v2, cp, ...rest } = this;
+        let { v2, cp, ...rest } = this;
         let data: EdgeDescriptor = rest;
-        if (v1) {
-            data.v1 = v1.copy();
-        }
-        if (v2 && v2 !== v1) {
+        data.v1 = this.v1.copy();
+        if (v2 !== this.v1) {
             data.v2 = v2.copy();
         }
         if (cp) {
@@ -369,3 +369,44 @@ export class Edge {
         return ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
     }
 }
+
+export const colorSchema = zod.string();
+export const lineDashSchema = zod.array(zod.number());
+export const jsonVector2Schema = zod.tuple([zod.number(), zod.number()]);
+
+export const graphSchema = zod.object({
+    version: zod.int().positive().optional(),
+    title: zod.string().nonempty().optional(),
+    view: zod.object({
+        x: zod.number().optional(),
+        y: zod.number().optional(),
+        zoom: zod.number().positive().optional(),
+    }).optional(),
+    settings: zod.object({
+        enableAxes: zod.boolean().optional(),
+        enableGrid: zod.boolean().optional(),
+        gridStepX: zod.number().positive().optional(),
+        gridStepY: zod.number().positive().optional(),
+    }).optional(),
+    vertices: zod.array(zod.object({
+        x: zod.number(),
+        y: zod.number(),
+        r: zod.number().optional(),
+        fill: colorSchema.optional(),
+        stroke: colorSchema.optional(),
+        lineWidth: zod.number().optional(),
+        lineDash: lineDashSchema.optional(),
+        shape: zod.int().nonnegative().optional(),
+    })).optional(),
+    edges: zod.array(zod.object({
+        v1: zod.int().nonnegative(),
+        v2: zod.int().nonnegative(),
+        cp: jsonVector2Schema.optional(),
+        stroke: colorSchema.optional(),
+        lineWidth: zod.number().optional(),
+        lineDash: lineDashSchema.optional(),
+        directed: zod.boolean().optional(),
+        arrowAngle: zod.number().optional(),
+        arrowLength: zod.number().optional(),
+    })).optional(),
+});
