@@ -264,15 +264,15 @@ export class Viewport {
         if (amount === 0 || !isFinite(amount)) {
             return;
         }
-        let oldPos = target === undefined ? undefined : this.locate(target);
+        let oldPos = target && this.locate(target);
         if (amount > 0) {
             this.zoom *= 1 + amount;
         } else if (amount < 0) {
             this.zoom /= 1 - amount;
         }
         // Correct the center to zoom into target
-        if (target !== undefined) {
-            this.#center.set(this.#center.add((oldPos as Vector2).sub(this.locate(target))));
+        if (target) {
+            this.#center.set(this.#center.add(oldPos!.sub(this.locate(target))));
         }
     }
 }

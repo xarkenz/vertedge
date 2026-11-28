@@ -45,6 +45,7 @@ export const config = {
     straightenCurveRadius: 20,
     scrollZoomMultiplier: 0.0005,
     keyZoomAmount: 0.1,
+    gridMinStepPixels: 8,
     defaults: {
         grid: {
             stepX: 50,
@@ -592,7 +593,7 @@ export class Vertedge {
                 let captureW = Math.ceil(this.captureArea.w);
                 let captureH = Math.ceil(this.captureArea.h);
 
-                this.capture_preview.label = `Preview (${captureW} \u00d7 ${captureH}):`
+                this.capture_preview.label = `Preview (${captureW} \u00d7 ${captureH}):`;
                 this.capture_preview.resize(captureW, captureH);
                 this.capture_preview.ctx.resetTransform();
                 this.capture_preview.ctx.clearRect(0, 0, captureW, captureH);
@@ -715,13 +716,13 @@ export class Vertedge {
             let x0 = this.app.transformX(0);
             let y0 = this.app.transformY(0);
 
+            this.app.ctx.strokeStyle = "white";
             this.app.ctx.lineWidth = 2;
             this.app.ctx.setLineDash([]);
 
             if (gridEnabled) {
-                this.app.ctx.strokeStyle = "#fff1";
                 this.app.ctx.beginPath();
-                if (xStep * this.app.view.zoom >= 8) {
+                if (xStep * this.app.view.zoom >= config.gridMinStepPixels) {
                     for (let x = startX; x <= endX; x += xStep * this.app.view.zoom) {
                         if (axesVisible && x === x0) {
                             continue;
@@ -730,7 +731,7 @@ export class Vertedge {
                         this.app.ctx.lineTo(x, this.app.height);
                     }
                 }
-                if (yStep * this.app.view.zoom >= 8) {
+                if (yStep * this.app.view.zoom >= config.gridMinStepPixels) {
                     for (let y = startY; y <= endY; y += yStep * this.app.view.zoom) {
                         if (axesVisible && y === y0) {
                             continue;
@@ -739,16 +740,17 @@ export class Vertedge {
                         this.app.ctx.lineTo(this.app.width, y);
                     }
                 }
+                this.app.ctx.globalAlpha = 0.1;
                 this.app.ctx.stroke();
             }
 
             if (axesVisible) {
-                this.app.ctx.strokeStyle = "#fff3";
                 this.app.ctx.beginPath();
                 this.app.ctx.moveTo(startX, y0);
                 this.app.ctx.lineTo(endX, y0);
                 this.app.ctx.moveTo(x0, startY);
                 this.app.ctx.lineTo(x0, endY);
+                this.app.ctx.globalAlpha = 0.2;
                 this.app.ctx.stroke();
             }
         }
@@ -757,17 +759,20 @@ export class Vertedge {
         if (this.dragState && this.dragState.elements.length > 0) {
             for (let { element } of this.dragState.elements) {
                 element.draw(this.app.ctx, false, false, this.color, this.app.view);
+
                 if (element instanceof Edge && element.cp) {
+                    // Draw original control point position indicator.
                     let cp = this.app.view.transform(element.cp);
-                    this.app.ctx.strokeStyle = `${this.color}77`;
-                    this.app.ctx.lineWidth = 2;
-                    this.app.ctx.setLineDash([]);
                     this.app.ctx.beginPath();
                     this.app.ctx.moveTo(cp.x, cp.y + 6);
                     this.app.ctx.lineTo(cp.x + 6, cp.y);
                     this.app.ctx.lineTo(cp.x, cp.y - 6);
                     this.app.ctx.lineTo(cp.x - 6, cp.y);
                     this.app.ctx.closePath();
+                    this.app.ctx.strokeStyle = this.color;
+                    this.app.ctx.globalAlpha = 0.5;
+                    this.app.ctx.lineWidth = 2;
+                    this.app.ctx.setLineDash([]);
                     this.app.ctx.stroke();
                 }
             }
@@ -784,22 +789,24 @@ export class Vertedge {
         // Draw tool indicators
         if (this.dragState && (this.dragState.button === 2 || this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE)) {
             // Draw drag start indicator
-            this.app.ctx.strokeStyle = "#fff2";
-            this.app.ctx.lineWidth = 2;
-            this.app.ctx.setLineDash([]);
             this.app.ctx.beginPath();
             this.app.ctx.moveTo(this.dragState.x, this.dragState.y - 8);
             this.app.ctx.lineTo(this.dragState.x, this.dragState.y + 8);
             this.app.ctx.moveTo(this.dragState.x - 8, this.dragState.y);
             this.app.ctx.lineTo(this.dragState.x + 8, this.dragState.y);
+            this.app.ctx.strokeStyle = "white";
+            this.app.ctx.globalAlpha = 0.1;
+            this.app.ctx.lineWidth = 2;
+            this.app.ctx.setLineDash([]);
             this.app.ctx.stroke();
         }
         else if (this.app.tool === Tools.DRAW && this.app.hoverPos) {
             let drawingLoop = this.dragState?.drawFromVertex && this.app.ctrlKey;
             let pos = gridEnabled ? this.app.transform(this.snapToGrid(this.app.locate(this.app.hoverPos))) : this.app.hoverPos;
             // Draw vertex preview
-            this.app.ctx.fillStyle = `${this.color}aa`;
-            this.app.ctx.strokeStyle = `${this.color}aa`;
+            this.app.ctx.fillStyle = this.color;
+            this.app.ctx.strokeStyle = this.color;
+            this.app.ctx.globalAlpha = 0.7;
             this.app.ctx.lineWidth = 2;
             this.app.ctx.setLineDash([]);
             if (drawingLoop) {
@@ -855,11 +862,10 @@ export class Vertedge {
             }
         }
         else if (this.dragState && this.dragState.elements.length === 0 && this.app.hoverPos) {
-            // Draw selection box
-            this.app.ctx.strokeStyle = `${this.color}77`;
-            this.app.ctx.lineWidth = 2;
-            this.app.ctx.setLineDash([5, 5]);
-            // Below differs from ctx.rect() because it locks the line dash at the start and end corners, which looks nicer
+            // Draw the selection box.
+            // Rather than use rect(), put each side of the box in its own
+            // subpath so we can lock the line dash to the start and end
+            // corners as the box is dragged out.
             this.app.ctx.beginPath();
             this.app.ctx.moveTo(this.dragState.x, this.dragState.y);
             this.app.ctx.lineTo(this.app.hoverPos.x, this.dragState.y);
@@ -869,6 +875,10 @@ export class Vertedge {
             this.app.ctx.lineTo(this.dragState.x, this.app.hoverPos.y);
             this.app.ctx.moveTo(this.app.hoverPos.x, this.app.hoverPos.y);
             this.app.ctx.lineTo(this.app.hoverPos.x, this.dragState.y);
+            this.app.ctx.strokeStyle = this.color;
+            this.app.ctx.globalAlpha = 0.5;
+            this.app.ctx.lineWidth = 2;
+            this.app.ctx.setLineDash([5, 5]);
             this.app.ctx.stroke();
         }
 
@@ -876,12 +886,13 @@ export class Vertedge {
         if (this.app.tool === Tools.CAPTURE && this.captureArea != null) {
             const rect = this.captureArea.transformed(this.app.view);
             const cx = Math.round(rect.cx), cy = Math.round(rect.cy);
-            this.app.ctx.fillStyle = `${Color.ORANGE}33`;
-            this.app.ctx.strokeStyle = `${Color.ORANGE}aa`;
+            this.app.ctx.fillStyle = Color.ORANGE;
+            this.app.ctx.strokeStyle = Color.ORANGE;
             this.app.ctx.lineWidth = 2;
             this.app.ctx.setLineDash([]);
             this.app.ctx.beginPath();
             this.app.ctx.rect(rect.x, rect.y, rect.w, rect.h);
+            this.app.ctx.globalAlpha = 0.2;
             this.app.ctx.fill();
             // Resize handles
             this.app.ctx.rect(rect.x - 6, rect.y - 6, 12, 12);
@@ -896,10 +907,10 @@ export class Vertedge {
                 this.app.ctx.rect(rect.xw - 6, cy - 6, 12, 12);
                 this.app.ctx.rect(rect.x - 6, cy - 6, 12, 12);
             }
+            this.app.ctx.globalAlpha = 0.7;
             this.app.ctx.stroke();
             // Indicator for hovering over a box resize handle
             if (this.dragState?.resizeBoxRegion ?? resizeBoxRegion != null) {
-                this.app.ctx.fillStyle = this.dragState?.resizeBoxRegion != null ? `${Color.ORANGE}aa` : `${Color.ORANGE}77`;
                 this.app.ctx.beginPath();
                 switch (this.dragState?.resizeBoxRegion ?? resizeBoxRegion) {
                     case BoxRegion.NEGATIVE_Y: this.app.ctx.rect(cx - 6, rect.y - 6, 12, 12); break;
@@ -912,6 +923,7 @@ export class Vertedge {
                     case BoxRegion.NEGATIVE_X_POSITIVE_Y: this.app.ctx.rect(rect.x - 6, rect.yh - 6, 12, 12); break;
                     default: break;
                 }
+                this.app.ctx.globalAlpha = this.dragState?.resizeBoxRegion != null ? 0.7 : 0.5;
                 this.app.ctx.fill();
             }
         }
@@ -1602,7 +1614,7 @@ export class Vertedge {
 
     loadFromData(data: unknown): void {
         let graph = graphSchema.parse(data);
-        let version = graph.version || 1;
+        let version = Math.max(0, graph.version || 0);
 
         this.app.title = graph.title || this.app.defaultTitle();
 

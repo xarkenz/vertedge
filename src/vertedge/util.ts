@@ -7,6 +7,7 @@ import { svgCreateChild, svgNew, svgToDataURL } from "./svg";
 export interface GraphDrawingContext {
     fillStyle: string | CanvasGradient | CanvasPattern;
     strokeStyle: string | CanvasGradient | CanvasPattern;
+    globalAlpha: number;
     lineCap: CanvasLineCap;
     lineDashOffset: number;
     lineJoin: CanvasLineJoin;

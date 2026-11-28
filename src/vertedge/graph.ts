@@ -1,6 +1,6 @@
 import * as zod from "zod";
 import { Vector2, Viewport, type Vector2Like } from "@/apper/math";
-import { Color, type GraphDrawingContext } from "@/vertedge/util";
+import { type GraphDrawingContext } from "@/vertedge/util";
 import { config } from ".";
 
 export interface VertexShape {
@@ -114,28 +114,28 @@ export class Vertex {
         this.shape.path(ctx, view.transform(this), this.r * view.zoom);
     }
 
-    draw(ctx: GraphDrawingContext, hover: boolean, select: boolean, highlight: string, view: Viewport = new Viewport()): void {
-        this.r = Math.abs(this.r);
-        if (hover || select) {
-            ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
-            ctx.lineWidth = this.lineWidth * view.zoom + 4;
-            ctx.setLineDash([]);
+    draw(ctx: GraphDrawingContext, hovered: boolean, selected: boolean, highlightColor: string, view: Viewport = new Viewport()): void {
+        // Draw the hover/selection outline, if applicable.
+        if (hovered || selected) {
             ctx.beginPath();
             this.path(ctx, view);
+            ctx.strokeStyle = highlightColor;
+            ctx.globalAlpha = selected ? hovered ? 1 : 0.8 : 0.6;
+            ctx.lineWidth = this.lineWidth * view.zoom + 4;
+            ctx.setLineDash([]);
             ctx.stroke();
         }
-        ctx.fillStyle = this.fill;
-        ctx.strokeStyle = this.stroke;
-        ctx.lineWidth = this.lineWidth * view.zoom;
-        ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth * view.zoom));
+
+        // Draw the vertex.
         ctx.beginPath();
         this.path(ctx, view);
-        if (this.r > 0) {
-            ctx.fill();
-        }
-        if (this.lineWidth > 0) {
-            ctx.stroke();
-        }
+        ctx.fillStyle = this.fill;
+        ctx.strokeStyle = this.stroke;
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = this.lineWidth * view.zoom;
+        ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth * view.zoom));
+        ctx.fill();
+        ctx.stroke();
     }
 
     contains(ctx: CanvasRenderingContext2D, pos: Vector2Like, selected: boolean, view: Viewport = new Viewport(), screen: boolean = false): boolean {
@@ -145,9 +145,11 @@ export class Vertex {
         if (!screen) {
             pos = view.transform(pos);
         }
-        ctx.lineWidth = selected ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
+
+        // Test within the shape of the vertex.
         ctx.beginPath();
         this.path(ctx, view);
+        ctx.lineWidth = selected ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
         return ctx.isPointInPath(pos.x * view.scale, pos.y * view.scale) || ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
     }
 }
@@ -222,7 +224,6 @@ export class Edge {
     }
 
     path(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
-        if (!this.v1 || !this.v2) return;
         let v1 = view.transform(this.v1);
         let v2 = view.transform(this.v2);
         if (this.cp && this.v1 !== this.v2) {
@@ -243,7 +244,6 @@ export class Edge {
     }
 
     pathArrow(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
-        if (!this.v1 || !this.v2) return;
         let v1 = view.transform(this.v1);
         let v2 = view.transform(this.v2);
         let margin = this.v2.margin() * view.zoom;
@@ -288,58 +288,68 @@ export class Edge {
         ctx.lineTo(tip.x + len * (dir.x * cos + dir.y * sin), tip.y + len * (dir.y * cos - dir.x * sin));
     }
 
-    draw(ctx: GraphDrawingContext, hover: boolean, select: boolean, highlight: string, view: Viewport = new Viewport()): void {
-        if (!this.v1 || !this.v2) return;
-        if (hover || select) {
-            ctx.strokeStyle = select ? `${highlight}cc` : `${highlight}99`;
+    draw(ctx: GraphDrawingContext, hovered: boolean, selected: boolean, highlightColor: string, view: Viewport = new Viewport()): void {
+        // Draw the hover/selection outline, if applicable.
+        if (hovered || selected) {
+            ctx.beginPath();
+            this.path(ctx, view);
+            if (this.directed) {
+                this.pathArrow(ctx, view);
+            }
+            ctx.strokeStyle = highlightColor;
+            ctx.globalAlpha = selected ? hovered ? 1 : 0.8 : 0.6;
             ctx.lineWidth = this.lineWidth * view.zoom + 4;
             ctx.setLineDash([]);
-            ctx.beginPath();
-            this.path(ctx, view);
-            if (this.directed) {
-                this.pathArrow(ctx, view);
-            }
             ctx.stroke();
         }
+
+        // Draw the edge, but avoid drawing the arrowhead as a dashed line
+        // since it tends to look a little silly.
+        ctx.beginPath();
+        this.path(ctx, view);
         ctx.strokeStyle = this.stroke;
+        ctx.globalAlpha = 1;
         ctx.lineWidth = this.lineWidth * view.zoom;
-        if (this.lineWidth > 0) {
-            ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth * view.zoom));
+        ctx.setLineDash(this.lineDash.map(value => value * this.lineWidth * view.zoom));
+        ctx.stroke();
+        if (this.directed) {
             ctx.beginPath();
-            this.path(ctx, view);
+            this.pathArrow(ctx, view);
+            ctx.setLineDash([]);
             ctx.stroke();
-            if (this.directed) {
-                ctx.setLineDash([]);
-                ctx.beginPath();
-                this.pathArrow(ctx, view);
-                ctx.stroke();
-            }
         }
-        if (select && this.cp) {
-            // Either curved edge or edge loop
+
+        // Draw control indicators for curved edges and edge loops.
+        if (selected && this.cp) {
             let v1 = view.transform(this.v1);
             let v2 = view.transform(this.v2);
             let cp = view.transform(this.cp);
+
             if (this.isCurve()) {
-                // Draw lines to control point
-                ctx.strokeStyle = `${highlight}77`;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([2, 5]);
+                // Draw tangent lines to the control point. Each tangent line
+                // should be its own subpath so the dashes on the line don't
+                // shift around as the control point moves.
                 ctx.beginPath();
                 ctx.moveTo(v1.x, v1.y);
                 ctx.lineTo(cp.x, cp.y);
                 ctx.moveTo(v2.x, v2.y);
                 ctx.lineTo(cp.x, cp.y);
+                ctx.strokeStyle = highlightColor;
+                ctx.globalAlpha = 0.5;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([2, 5]);
                 ctx.stroke();
             }
-            // Draw control point diamond
-            ctx.fillStyle = `${highlight}cc`;
+    
+            // Draw the control point diamond.
             ctx.beginPath();
             ctx.moveTo(cp.x, cp.y + 8);
             ctx.lineTo(cp.x + 8, cp.y);
             ctx.lineTo(cp.x, cp.y - 8);
             ctx.lineTo(cp.x - 8, cp.y);
             ctx.closePath();
+            ctx.fillStyle = highlightColor;
+            ctx.globalAlpha = 0.8;
             ctx.fill();
         }
     }
@@ -351,8 +361,10 @@ export class Edge {
         if (!screen) {
             pos = view.transform(pos);
         }
+
+        // If the control point diamond is visible, test within a circular
+        // region around it.
         if (selected && this.cp) {
-            // Either curved edge or edge loop
             let cp = view.transform(this.cp);
             ctx.beginPath();
             ctx.ellipse(cp.x, cp.y, 10, 10, 0, 0, 2 * Math.PI);
@@ -360,12 +372,14 @@ export class Edge {
                 return true;
             }
         }
-        ctx.lineWidth = selected ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
+
+        // Test the shape of the edge itself.
         ctx.beginPath();
         this.path(ctx, view);
         if (this.directed) {
             this.pathArrow(ctx, view);
         }
+        ctx.lineWidth = selected ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
         return ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
     }
 }

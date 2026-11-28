@@ -145,6 +145,7 @@ function anyInvalid(...values: number[]): boolean {
 export class SVGGraphDrawingContext implements GraphDrawingContext {
     fillStyle: string | CanvasGradient | CanvasPattern = "#000000";
     strokeStyle: string | CanvasGradient | CanvasPattern = "#000000";
+    globalAlpha: number = 1;
     lineWidth: number = 1;
     lineCap: CanvasLineCap = "butt";
     lineJoin: CanvasLineJoin = "miter";
@@ -182,6 +183,9 @@ export class SVGGraphDrawingContext implements GraphDrawingContext {
         }
         svgPath.setAttribute("fill", this.fillStyle);
         svgPath.setAttribute("stroke", "none");
+        if (this.globalAlpha < 1) {
+            svgPath.setAttribute("fill-opacity", this.globalAlpha.toString());
+        }
         svgPath.setAttribute("d", serializePath(this.#path));
     }
 
@@ -192,6 +196,9 @@ export class SVGGraphDrawingContext implements GraphDrawingContext {
             throw new Error("Gradients/Patterns not yet implemented.");
         }
         svgPath.setAttribute("stroke", this.strokeStyle);
+        if (this.globalAlpha < 1) {
+            svgPath.setAttribute("stroke-opacity", this.globalAlpha.toString());
+        }
         svgPath.setAttribute("stroke-width", this.lineWidth.toString());
         svgPath.setAttribute("stroke-linecap", this.lineCap);
         svgPath.setAttribute("stroke-linejoin", this.lineJoin);
