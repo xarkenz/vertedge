@@ -2,6 +2,7 @@ import icon_transparent from "./assets/icons/transparent.svg";
 
 import { Vector2, type Vector2Like } from "@/apper/math";
 import { config } from ".";
+import { svgCreateChild, svgNew, svgToDataURL } from "./svg";
 
 export interface GraphDrawingContext {
     fillStyle: string | CanvasGradient | CanvasPattern;
@@ -103,18 +104,49 @@ export function linesIntersect(p1: Vector2Like, q1: Vector2Like, p2: Vector2Like
     return orientationOf(p1, q1, p2) !== orientationOf(p1, q1, q2) && orientationOf(p2, q2, p1) !== orientationOf(p2, q2, q1);
 }
 
-export function getFillColorIcon(color: string): string {
-    return color === Color.NONE ? icon_transparent : `\
-        <svg version="1.1" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-            <ellipse fill="${color}" stroke="none" cx="16" cy="16" rx="9" ry="9"/>
-        </svg>`;
+export function getVertexFillColorIcon(color: string): string {
+    if (color === Color.NONE) {
+        return icon_transparent;
+    }
+    let svg = svgNew(-16, -16, 32, 32);
+    let ellipse = svgCreateChild(svg, "ellipse");
+    ellipse.setAttribute("fill", color);
+    ellipse.setAttribute("stroke", "none");
+    ellipse.setAttribute("cx", "0");
+    ellipse.setAttribute("cy", "0");
+    ellipse.setAttribute("rx", "9");
+    ellipse.setAttribute("ry", "9");
+    return svgToDataURL(svg);
 }
 
-export function getStrokeColorIcon(color: string): string {
-    return color === Color.NONE ? icon_transparent : `\
-        <svg version="1.1" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-            <ellipse fill="none" stroke="${color}" stroke-width="2" cx="16" cy="16" rx="8" ry="8"/>
-        </svg>`;
+export function getVertexOutlineColorIcon(color: string): string {
+    if (color === Color.NONE) {
+        return icon_transparent;
+    }
+    let svg = svgNew(-16, -16, 32, 32);
+    let ellipse = svgCreateChild(svg, "ellipse");
+    ellipse.setAttribute("fill", "none");
+    ellipse.setAttribute("stroke", color);
+    ellipse.setAttribute("stroke-width", "2");
+    ellipse.setAttribute("cx", "0");
+    ellipse.setAttribute("cy", "0");
+    ellipse.setAttribute("rx", "8");
+    ellipse.setAttribute("ry", "8");
+    return svgToDataURL(svg);
+}
+
+export function getEdgeColorIcon(color: string): string {
+    if (color === Color.NONE) {
+        return icon_transparent;
+    }
+    let svg = svgNew(-16, -16, 32, 32);
+    let path = svgCreateChild(svg, "path");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", color);
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("d", "M -8,0 q 4,-4 8,0 q 4,4 8,0");
+    return svgToDataURL(svg);
 }
 
 export const Color = {

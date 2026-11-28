@@ -171,7 +171,7 @@ export class HSpread {
         this.#label.textContent = label;
         this.#element.appendChild(this.#label);
 
-        if (labelIcon !== undefined) {
+        if (typeof labelIcon === "string") {
             let icon = document.createElement("img");
             icon.src = labelIcon;
             this.#element.appendChild(icon);
@@ -198,14 +198,9 @@ export class HSpread {
             let button = document.createElement("span");
             container.appendChild(button);
 
-            iconSrc = iconSrc.trim();
-            if (iconSrc.startsWith("<")) {
-                button.innerHTML = iconSrc;
-            } else {
-                let icon = document.createElement("img");
-                icon.src = iconSrc;
-                button.appendChild(icon);
-            }
+            let icon = document.createElement("img");
+            icon.src = iconSrc;
+            button.appendChild(icon);
         });
     }
 

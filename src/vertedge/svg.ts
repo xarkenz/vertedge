@@ -1,6 +1,26 @@
 import type { GraphDrawingContext } from "./util";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
+export const SVG_NS = "http://www.w3.org/2000/svg";
+
+export function svgNew(x: number, y: number, w: number, h: number): SVGSVGElement {
+    let svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("xmlns", SVG_NS);
+    svg.setAttribute("version", "1.1");
+    svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
+    svg.setAttribute("width", w.toString());
+    svg.setAttribute("height", h.toString());
+    return svg;
+}
+
+export function svgCreateChild<K extends keyof SVGElementTagNameMap>(parent: SVGElement, type: K): SVGElementTagNameMap[K] {
+    let child = document.createElementNS(SVG_NS, type);
+    parent.appendChild(child);
+    return child;
+}
+
+export function svgToDataURL(svg: SVGSVGElement): string {
+    return "data:image/svg+xml," + encodeURIComponent(svg.outerHTML);
+}
 
 type PathCommand = {
     type: "move",
@@ -136,12 +156,7 @@ export class SVGGraphDrawingContext implements GraphDrawingContext {
     #path: PathCommand[] = [];
 
     constructor(x: number, y: number, w: number, h: number) {
-        this.#svg = document.createElementNS(SVG_NS, "svg");
-        this.#svg.setAttribute("xmlns", SVG_NS);
-        this.#svg.setAttribute("version", "1.1");
-        this.#svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
-        this.#svg.setAttribute("width", w.toString());
-        this.#svg.setAttribute("height", h.toString());
+        this.#svg = svgNew(x, y, w, h);
     }
 
     getLineDash(): number[] {
@@ -153,7 +168,7 @@ export class SVGGraphDrawingContext implements GraphDrawingContext {
     }
 
     toDataURL(): string {
-        return "data:image/svg+xml," + encodeURIComponent(this.#svg.outerHTML);
+        return svgToDataURL(this.#svg);
     }
 
     beginPath(): void {
@@ -161,18 +176,17 @@ export class SVGGraphDrawingContext implements GraphDrawingContext {
     }
 
     fill(): void {
-        let svgPath = document.createElementNS(SVG_NS, "path");
+        let svgPath = svgCreateChild(this.#svg, "path");
         if (typeof this.fillStyle !== "string") {
             throw new Error("Gradients/Patterns not yet implemented.");
         }
         svgPath.setAttribute("fill", this.fillStyle);
         svgPath.setAttribute("stroke", "none");
         svgPath.setAttribute("d", serializePath(this.#path));
-        this.#svg.appendChild(svgPath);
     }
 
     stroke(): void {
-        let svgPath = document.createElementNS(SVG_NS, "path");
+        let svgPath = svgCreateChild(this.#svg, "path");
         svgPath.setAttribute("fill", "none");
         if (typeof this.strokeStyle !== "string") {
             throw new Error("Gradients/Patterns not yet implemented.");
@@ -189,7 +203,6 @@ export class SVGGraphDrawingContext implements GraphDrawingContext {
             svgPath.setAttribute("stroke-dashoffset", this.lineDashOffset.toString());
         }
         svgPath.setAttribute("d", serializePath(this.#path));
-        this.#svg.appendChild(svgPath);
     }
 
     moveTo(x: number, y: number): void {

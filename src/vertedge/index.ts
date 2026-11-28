@@ -30,7 +30,7 @@ import icon_width from "./assets/icons/width.svg";
 
 import { GraphicalEditor, Modal, Panel, Shortcut, Tool, type ApperDragEvent, type ApperKeyEvent, type ApperWheelEvent } from "@/apper";
 import { Edge, getVertexShapeByID, graphSchema, Vertex, VertexShape, type EdgeDescriptor } from "./graph";
-import { Color, getFillColorIcon, getStrokeColorIcon, linesIntersect, nearestOnLineSegment, nearestOnQuadraticCurve, quadraticCurve, quadraticCurveVertexX, quadraticCurveVertexY } from "./util";
+import { Color, getEdgeColorIcon, getVertexFillColorIcon as getVertexColorIcon, getVertexOutlineColorIcon, linesIntersect, nearestOnLineSegment, nearestOnQuadraticCurve, quadraticCurve, quadraticCurveVertexX, quadraticCurveVertexY } from "./util";
 import { Button, ButtonList, CanvasImage, Checkbox, FileInput, HSpread, NumberInput, Paragraph, TextEditor } from "@/apper/widget";
 import { BoxRegion, getResizeCursor } from "@/apper/util";
 import { Rect, Vector2, Viewport, type Vector2Like } from "@/apper/math";
@@ -51,17 +51,17 @@ export const config = {
             stepY: 50,
         },
         vertex: {
+            color: Color.DARK,
+            outlineColor: Color.LIGHT,
             radius: 10,
-            fill: Color.DARK,
-            stroke: Color.LIGHT,
-            lineWidth: 4,
-            lineDash: [2, 2], // Only if line dash enabled.
+            outlineWidth: 4,
+            outlineDashArray: [2], // Only if line dash enabled.
             shape: VertexShape.CIRCLE,
         },
         edge: {
-            stroke: Color.DARK,
-            lineWidth: 4,
-            lineDash: [2, 2], // Only if line dash enabled.
+            color: Color.DARK,
+            width: 4,
+            dashArray: [2], // Only if line dash enabled.
             arrowAngle: 30,
             arrowLength: 20,
         },
@@ -120,16 +120,19 @@ export class Vertedge {
     } | null = null;
 
     stylePanel: Panel;
-    style_fillColor: HSpread;
-    style_lineColor: HSpread;
+    style_vertexColor: HSpread;
+    style_vertexOutlineColor: HSpread;
+    style_edgeColor: HSpread;
     style_vertexShape: HSpread;
     style_vertexRadius: NumberInput;
-    style_lineWidth: NumberInput;
-    style_lineDash: Checkbox;
+    style_vertexOutlineWidth: NumberInput;
+    style_vertexOutlineDash: Checkbox;
     style_edgeDirected: Checkbox;
     style_reverseEdge: Button;
-    style_arrowAngle: NumberInput;
-    style_arrowLength: NumberInput;
+    style_edgeArrowAngle: NumberInput;
+    style_edgeArrowLength: NumberInput;
+    style_edgeWidth: NumberInput;
+    style_edgeDash: Checkbox;
 
     gridPanel: Panel;
     grid_enableAxes: Checkbox;
@@ -189,7 +192,7 @@ export class Vertedge {
 
         this.stylePanel = this.app.addPanel("Element Style")
             .addSeparator()
-            .add(this.style_fillColor = new HSpread("vertedge-fill-color", "Fill color:", colorOptions.map(color => getFillColorIcon(color)), icon_color)
+            .add(this.style_vertexColor = new HSpread("vertedge-vertex-color", "Vertex color:", colorOptions.map(color => getVertexColorIcon(color)), icon_color)
                 .onChange(value => {
                     let color = colorOptions[value];
                     if (!color) return;
@@ -200,17 +203,18 @@ export class Vertedge {
                     });
                     this.app.redraw();
                 }))
-            .add(this.style_lineColor = new HSpread("vertedge-line-color", "Line color:", colorOptions.map(color => getStrokeColorIcon(color)), icon_stroke)
+            .add(this.style_vertexOutlineColor = new HSpread("vertedge-vertex-outline-color", "Vertex outline color:", colorOptions.map(color => getVertexOutlineColorIcon(color)), icon_stroke)
                 .onChange(value => {
                     let color = colorOptions[value];
                     if (!color) return;
                     this.selection.forEach(element => {
-                        element.stroke = color;
+                        if (element instanceof Vertex) {
+                            element.stroke = color;
+                        }
                     });
                     this.app.redraw();
                 }))
-            .addSeparator()
-            .add(this.style_vertexShape = new HSpread("vertedge-vertex-shape", "Shape:", shapeOptions, icon_shape)
+            .add(this.style_vertexShape = new HSpread("vertedge-vertex-shape", "Vertex shape:", shapeOptions, icon_shape)
                 .onChange(value => {
                     let shape = getVertexShapeByID(value);
                     if (!shape) return;
@@ -221,7 +225,7 @@ export class Vertedge {
                     });
                     this.app.redraw();
                 }))
-            .add(this.style_vertexRadius = new NumberInput("vertedge-vertex-radius", "Radius:", icon_radius).setMin(0)
+            .add(this.style_vertexRadius = new NumberInput("vertedge-vertex-radius", "Vertex radius:", icon_radius).setMin(0)
                 .onChange(value => {
                     this.selection.forEach(element => {
                         if (element instanceof Vertex) {
@@ -230,21 +234,56 @@ export class Vertedge {
                     });
                     this.app.redraw();
                 }))
-            .add(this.style_lineWidth = new NumberInput("vertedge-line-width", "Line width:", icon_lineWidth).setMin(0)
+            .add(this.style_vertexOutlineWidth = new NumberInput("vertedge-vertex-outline-width", "Vertex outline thickness:", icon_lineWidth).setMin(0)
                 .onChange(value => {
                     this.selection.forEach(element => {
-                        element.lineWidth = value;
+                        if (element instanceof Vertex) {
+                            element.lineWidth = value;
+                        }
                     });
                     this.app.redraw();
                 }))
-            .add(this.style_lineDash = new Checkbox("vertedge-line-dash", "Dashed line")
+            .add(this.style_vertexOutlineDash = new Checkbox("vertedge-vertex-outline-dash", "Dashed vertex outline")
                 .onChange(value => {
+                    let lineDash = value ? config.defaults.vertex.outlineDashArray : [];
                     this.selection.forEach(element => {
-                        element.lineDash = value ? config.defaults.vertex.lineDash : [];
+                        if (element instanceof Vertex) {
+                            element.lineDash = lineDash;
+                        }
                     });
                     this.app.redraw();
                 }))
             .addSeparator()
+            .add(this.style_edgeColor = new HSpread("vertedge-edge-color", "Edge color:", colorOptions.map(color => getEdgeColorIcon(color)), icon_stroke)
+                .onChange(value => {
+                    let color = colorOptions[value];
+                    if (!color) return;
+                    this.selection.forEach(element => {
+                        if (element instanceof Edge) {
+                            element.stroke = color;
+                        }
+                    });
+                    this.app.redraw();
+                }))
+            .add(this.style_edgeWidth = new NumberInput("vertedge-edge-width", "Edge thickness:", icon_lineWidth).setMin(0)
+                .onChange(value => {
+                    this.selection.forEach(element => {
+                        if (element instanceof Edge) {
+                            element.lineWidth = value;
+                        }
+                    });
+                    this.app.redraw();
+                }))
+            .add(this.style_edgeDash = new Checkbox("vertedge-edge-dash", "Dashed edge")
+                .onChange(value => {
+                    let lineDash = value ? config.defaults.edge.dashArray : [];
+                    this.selection.forEach(element => {
+                        if (element instanceof Edge) {
+                            element.lineDash = lineDash;
+                        }
+                    });
+                    this.app.redraw();
+                }))
             .add(this.style_edgeDirected = new Checkbox("vertedge-edge-directed", "Directed edge")
                 .onChange(value => {
                     this.selection.forEach(element => {
@@ -263,7 +302,7 @@ export class Vertedge {
                     });
                     this.app.redraw();
                 }))
-            .add(this.style_arrowAngle = new NumberInput("vertedge-arrow-angle", "Arrow angle (degrees):").setMin(0).setMax(90)
+            .add(this.style_edgeArrowAngle = new NumberInput("vertedge-edge-arrow-angle", "Arrow angle (degrees):").setMin(0).setMax(90)
                 .onChange(value => {
                     this.selection.forEach(element => {
                         if (element instanceof Edge) {
@@ -272,7 +311,7 @@ export class Vertedge {
                     });
                     this.app.redraw();
                 }))
-            .add(this.style_arrowLength = new NumberInput("vertedge-arrow-length", "Arrow length:").setMin(0)
+            .add(this.style_edgeArrowLength = new NumberInput("vertedge-edge-arrow-length", "Arrow length:").setMin(0)
                 .onChange(value => {
                     this.selection.forEach(element => {
                         if (element instanceof Edge) {
@@ -405,138 +444,114 @@ export class Vertedge {
             : Color.PURPLE;
         let resizeBoxRegion = this.app.tool === Tools.CAPTURE ? this.getResizeBoxRegion() : null;
 
-        if (this.app.tool === Tools.STYLE && this.selection.length) {
+        if (this.app.tool === Tools.STYLE && this.selection.length > 0) {
+            const getColorValue = (color: string | undefined): number | undefined => {
+                if (typeof color !== "string") return undefined;
+                let index = colorOptions.indexOf(color);
+                return index >= 0 ? index : undefined;
+            };
+
             if (this.selection.some(element => element instanceof Vertex)) {
-                this.style_fillColor.show();
+                this.style_vertexColor.show();
+                this.style_vertexOutlineColor.show();
                 this.style_vertexShape.show();
                 this.style_vertexRadius.show();
+                this.style_vertexOutlineWidth.show();
+                this.style_vertexOutlineDash.show();
 
-                let fillColor = undefined;
-                for (let element of this.selection) {
-                    if (element instanceof Vertex) {
-                        if (fillColor === undefined) {
-                            fillColor = element.fill;
-                        } else if (element.fill !== fillColor) {
-                            fillColor = undefined;
-                            break;
+                const computeSelectedStyle = <T>(getStyle: (vertex: Vertex) => T): T | undefined => {
+                    let selected: T | undefined = undefined;
+                    for (let element of this.selection) {
+                        if (element instanceof Vertex) {
+                            let style = getStyle(element);
+                            if (selected === undefined) {
+                                selected = style;
+                            } else if (style !== selected) {
+                                return undefined;
+                            }
                         }
                     }
-                }
-                if (fillColor === undefined) {
-                    this.style_fillColor.value = undefined;
-                } else {
-                    let index = colorOptions.indexOf(fillColor);
-                    this.style_fillColor.value = index < 0 ? undefined : index;
-                }
+                    return selected;
+                };
 
-                let shape = undefined;
-                for (let element of this.selection) {
-                    if (element instanceof Vertex) {
-                        if (shape === undefined) {
-                            shape = element.shape;
-                        } else if (element.shape !== shape) {
-                            shape = undefined;
-                            break;
-                        }
-                    }
-                }
-                this.style_vertexShape.value = shape?.id;
+                let vertexColor = computeSelectedStyle(vertex => vertex.fill);
+                let vertexOutlineColor = computeSelectedStyle(vertex => vertex.stroke);
+                let vertexShape = computeSelectedStyle(vertex => vertex.shape);
+                let vertexRadius = computeSelectedStyle(vertex => vertex.r);
+                let vertexOutlineWidth = computeSelectedStyle(vertex => vertex.lineWidth);
 
-                let radius = undefined;
-                for (let element of this.selection) {
-                    if (element instanceof Vertex) {
-                        if (radius === undefined) {
-                            radius = element.r;
-                        } else if (element.r !== radius) {
-                            radius = undefined;
-                            break;
-                        }
-                    }
-                }
-                this.style_vertexRadius.value = radius ?? config.defaults.vertex.radius;
-            } else {
-                this.style_fillColor.hide();
+                this.style_vertexColor.value = getColorValue(vertexColor);
+                this.style_vertexOutlineColor.value = getColorValue(vertexOutlineColor);
+                this.style_vertexShape.value = vertexShape?.id;
+                this.style_vertexRadius.value = vertexRadius ?? config.defaults.vertex.radius;
+                this.style_vertexOutlineWidth.value = vertexOutlineWidth ?? config.defaults.vertex.outlineWidth;
+                this.style_vertexOutlineDash.checked = this.selection.some(element => element instanceof Vertex && element.lineDash.length > 0);
+            }
+            else {
+                this.style_vertexColor.hide();
+                this.style_vertexOutlineColor.hide();
                 this.style_vertexShape.hide();
                 this.style_vertexRadius.hide();
+                this.style_vertexOutlineWidth.hide();
+                this.style_vertexOutlineDash.hide();
             }
 
             if (this.selection.some(element => element instanceof Edge)) {
+                this.style_edgeColor.show();
+                this.style_edgeWidth.show();
+                this.style_edgeDash.show();
                 this.style_edgeDirected.show();
                 this.style_reverseEdge.show();
-                this.style_arrowAngle.show();
-                this.style_arrowLength.show();
+                this.style_edgeArrowAngle.show();
+                this.style_edgeArrowLength.show();
 
-                this.style_edgeDirected.checked = this.selection.some(element => element instanceof Edge && element.directed)
-
-                let arrowAngle = undefined;
-                for (let element of this.selection) {
-                    if (element instanceof Edge) {
-                        if (arrowAngle === undefined) {
-                            arrowAngle = element.arrowAngle;
-                        } else if (element.arrowAngle !== arrowAngle) {
-                            arrowAngle = undefined;
-                            break;
+                const computeSelectedStyle = <T>(getStyle: (edge: Edge) => T): T | undefined => {
+                    let selected: T | undefined = undefined;
+                    for (let element of this.selection) {
+                        if (element instanceof Edge) {
+                            let style = getStyle(element);
+                            if (selected === undefined) {
+                                selected = style;
+                            } else if (style !== selected) {
+                                return undefined;
+                            }
                         }
                     }
-                }
-                this.style_arrowAngle.value = arrowAngle ?? config.defaults.edge.arrowAngle;
+                    return selected;
+                };
 
-                let arrowLength = undefined;
-                for (let element of this.selection) {
-                    if (element instanceof Edge) {
-                        if (arrowLength === undefined) {
-                            arrowLength = element.arrowLength;
-                        } else if (element.arrowLength !== arrowLength) {
-                            arrowLength = undefined;
-                            break;
-                        }
-                    }
-                }
-                this.style_arrowLength.value = arrowLength ?? config.defaults.edge.arrowLength;
-            } else {
+                let edgeColor = computeSelectedStyle(edge => edge.stroke);
+                let edgeWidth = computeSelectedStyle(edge => edge.lineWidth);
+                let edgeArrowAngle = computeSelectedStyle(edge => edge.arrowAngle);
+                let edgeArrowLength = computeSelectedStyle(edge => edge.arrowLength);
+
+                this.style_edgeColor.value = getColorValue(edgeColor);
+                this.style_edgeWidth.value = edgeWidth ?? config.defaults.edge.width;
+                this.style_edgeDash.checked = this.selection.some(element => element instanceof Edge && element.lineDash.length > 0);
+                this.style_edgeDirected.checked = this.selection.some(element => element instanceof Edge && element.directed);
+                this.style_edgeArrowAngle.value = edgeArrowAngle ?? config.defaults.edge.arrowAngle;
+                this.style_edgeArrowLength.value = edgeArrowLength ?? config.defaults.edge.arrowLength;
+            }
+            else {
+                this.style_edgeColor.hide();
+                this.style_edgeWidth.hide();
+                this.style_edgeDash.hide();
                 this.style_edgeDirected.hide();
                 this.style_reverseEdge.hide();
-                this.style_arrowAngle.hide();
-                this.style_arrowLength.hide();
+                this.style_edgeArrowAngle.hide();
+                this.style_edgeArrowLength.hide();
             }
-
-            let lineColor = undefined;
-            for (let element of this.selection) {
-                if (lineColor === undefined) {
-                    lineColor = element.stroke;
-                } else if (element.stroke !== lineColor) {
-                    lineColor = undefined;
-                    break;
-                }
-            }
-            if (lineColor === undefined) {
-                this.style_lineColor.value = undefined;
-            } else {
-                let index = colorOptions.indexOf(lineColor);
-                this.style_lineColor.value = index < 0 ? undefined : index;
-            }
-
-            let lineWidth = undefined;
-            for (let element of this.selection) {
-                if (lineWidth === undefined) {
-                    lineWidth = element.lineWidth;
-                } else if (element.lineWidth !== lineWidth) {
-                    lineWidth = undefined;
-                    break;
-                }
-            }
-            this.style_lineWidth.value = lineWidth ?? 4;
-
-            this.style_lineDash.checked = this.selection.some(element => element.lineDash.length > 1);
 
             this.stylePanel.show();
-        } else {
+        }
+        else {
             this.stylePanel.hide();
         }
 
         if (this.app.tool === Tools.GRID) {
             this.gridPanel.show();
-        } else {
+        }
+        else {
             this.gridPanel.hide();
         }
 
@@ -555,7 +570,8 @@ export class Vertedge {
                 this.capture_downloadSVG.hide();
                 this.capture_downloadSVG.url = "";
                 this.capture_downloadSVG.filename = "";
-            } else {
+            }
+            else {
                 this.capture_prompt.hide();
                 this.capture_emptyPreview.hide();
                 this.capture_instructions.show();
@@ -609,7 +625,8 @@ export class Vertedge {
             }
 
             this.capturePanel.show();
-        } else {
+        }
+        else {
             this.capturePanel.hide();
             
             this.captureArea = null;
@@ -621,7 +638,8 @@ export class Vertedge {
 
         if (this.app.tool === Tools.LOAD) {
             this.loadModal.show();
-        } else {
+        }
+        else {
             this.loadModal.hide();
         }
 
@@ -630,7 +648,8 @@ export class Vertedge {
             this.save_download.filename = `${this.app.title}.json`;
 
             this.saveModal.show();
-        } else {
+        }
+        else {
             this.saveModal.hide();
 
             this.save_download.url = "";
@@ -644,19 +663,22 @@ export class Vertedge {
             }
 
             this.dataPanel.show();
-        } else {
+        }
+        else {
             this.dataPanel.hide();
         }
 
         if (this.app.tool === Tools.SETTINGS) {
             this.settingsModal.show();
-        } else {
+        }
+        else {
             this.settingsModal.hide();
         }
 
         if (this.app.tool === Tools.HELP) {
             this.helpModal.show();
-        } else {
+        }
+        else {
             this.helpModal.hide();
         }
 
@@ -664,11 +686,13 @@ export class Vertedge {
         if (this.app.tool === Tools.MOVE || (this.dragState && this.dragState.button === 2)) {
             this.app.element.style.cursor = this.dragState ? "grabbing" : "";
             this.app.canvas.style.cursor = this.dragState ? "" : "grab";
-        } else if (this.app.tool === Tools.CAPTURE) {
+        }
+        else if (this.app.tool === Tools.CAPTURE) {
             let resizeCursor = getResizeCursor(this.dragState?.resizeBoxRegion ?? resizeBoxRegion!);
             this.app.element.style.cursor = this.dragState ? (resizeCursor ?? "grabbing") : "";
             this.app.canvas.style.cursor = this.dragState ? "" : (resizeCursor ?? "grab");
-        } else {
+        }
+        else {
             this.app.element.style.cursor = "";
             this.app.canvas.style.cursor = "";
         }
@@ -1617,9 +1641,9 @@ export class Vertedge {
             x: vertex.x,
             y: vertex.y,
             r: vertex.r === config.defaults.vertex.radius ? undefined : vertex.r,
-            fill: vertex.fill === config.defaults.vertex.fill ? undefined : vertex.fill,
-            stroke: vertex.stroke === config.defaults.vertex.stroke ? undefined : vertex.stroke,
-            lineWidth: vertex.lineWidth === config.defaults.vertex.lineWidth ? undefined : vertex.lineWidth,
+            fill: vertex.fill === config.defaults.vertex.color ? undefined : vertex.fill,
+            stroke: vertex.stroke === config.defaults.vertex.outlineColor ? undefined : vertex.stroke,
+            lineWidth: vertex.lineWidth === config.defaults.vertex.outlineWidth ? undefined : vertex.lineWidth,
             lineDash: !vertex.lineDash.length ? undefined : vertex.lineDash.slice(),
             shape: vertex.shape.id === 0 ? undefined : vertex.shape.id,
         }));
@@ -1628,8 +1652,8 @@ export class Vertedge {
             v1: edge.v1 && this.vertices.indexOf(edge.v1),
             v2: edge.v2 && (this.vertices.indexOf(edge.v2)),
             cp: edge.cp === null ? undefined : [edge.cp.x, edge.cp.y],
-            stroke: edge.stroke === config.defaults.edge.stroke ? undefined : edge.stroke,
-            lineWidth: edge.lineWidth === config.defaults.edge.lineWidth ? undefined : edge.lineWidth,
+            stroke: edge.stroke === config.defaults.edge.color ? undefined : edge.stroke,
+            lineWidth: edge.lineWidth === config.defaults.edge.width ? undefined : edge.lineWidth,
             lineDash: !edge.lineDash.length ? undefined : edge.lineDash.slice(),
             directed: !edge.directed ? undefined : edge.directed,
             arrowAngle: edge.arrowAngle === config.defaults.edge.arrowAngle ? undefined : edge.arrowAngle,

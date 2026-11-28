@@ -94,9 +94,9 @@ export class Vertex {
         this.x = data.x;
         this.y = data.y;
         this.r = Math.abs(data.r ?? config.defaults.vertex.radius);
-        this.fill = data.fill ?? config.defaults.vertex.fill;
-        this.stroke = data.stroke ?? config.defaults.vertex.stroke;
-        this.lineWidth = Math.abs(data.lineWidth ?? config.defaults.vertex.lineWidth);
+        this.fill = data.fill ?? config.defaults.vertex.color;
+        this.stroke = data.stroke ?? config.defaults.vertex.outlineColor;
+        this.lineWidth = Math.abs(data.lineWidth ?? config.defaults.vertex.outlineWidth);
         this.lineDash = (data.lineDash || []).slice();
         this.shape = data.shape || config.defaults.vertex.shape;
     }
@@ -179,8 +179,8 @@ export class Edge {
         this.v1 = data.v1 || null;
         this.v2 = data.v2 || this.v1;
         this.cp = (data.cp && new Vector2(data.cp)) || null;
-        this.stroke = data.stroke ?? config.defaults.edge.stroke;
-        this.lineWidth = Math.abs(data.lineWidth ?? config.defaults.edge.lineWidth);
+        this.stroke = data.stroke ?? config.defaults.edge.color;
+        this.lineWidth = Math.abs(data.lineWidth ?? config.defaults.edge.width);
         this.lineDash = (data.lineDash || []).slice();
         this.directed = !!data.directed;
         this.arrowAngle = data.arrowAngle ?? config.defaults.edge.arrowAngle;
