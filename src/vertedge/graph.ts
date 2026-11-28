@@ -109,24 +109,11 @@ export class Vertex {
         return this.shape.sizeFactor * this.r + 0.5 * this.lineWidth;
     }
 
-    path(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
-        this.r = Math.abs(this.r);
+    path(ctx: GraphDrawingContext, view: Viewport): void {
         this.shape.path(ctx, view.transform(this), this.r * view.zoom);
     }
 
-    draw(ctx: GraphDrawingContext, hovered: boolean, selected: boolean, highlightColor: string, view: Viewport = new Viewport()): void {
-        // Draw the hover/selection outline, if applicable.
-        if (hovered || selected) {
-            ctx.beginPath();
-            this.path(ctx, view);
-            ctx.strokeStyle = highlightColor;
-            ctx.globalAlpha = selected ? hovered ? 1 : 0.8 : 0.6;
-            ctx.lineWidth = this.lineWidth * view.zoom + 4;
-            ctx.setLineDash([]);
-            ctx.stroke();
-        }
-
-        // Draw the vertex.
+    draw(ctx: GraphDrawingContext, view: Viewport): void {
         ctx.beginPath();
         this.path(ctx, view);
         ctx.fillStyle = this.fill;
@@ -138,19 +125,31 @@ export class Vertex {
         ctx.stroke();
     }
 
-    contains(ctx: CanvasRenderingContext2D, pos: Vector2Like, selected: boolean, view: Viewport = new Viewport(), screen: boolean = false): boolean {
-        if (isNaN(pos.x) || isNaN(pos.y)) {
-            return false;
+    drawHighlight(ctx: GraphDrawingContext, view: Viewport, color: string, hovered: boolean, selected: boolean): void {
+        if (!hovered && !selected) {
+            return;
         }
-        if (!screen) {
-            pos = view.transform(pos);
+
+        ctx.beginPath();
+        this.path(ctx, view);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = selected ? hovered ? 1 : 0.8 : 0.6;
+        ctx.lineWidth = this.lineWidth * view.zoom + 4;
+        ctx.setLineDash([]);
+        ctx.stroke();
+    }
+
+    contains(ctx: CanvasRenderingContext2D, view: Viewport, screenPos: Vector2Like, selected: boolean): boolean {
+        if (isNaN(screenPos.x) || isNaN(screenPos.y)) {
+            return false;
         }
 
         // Test within the shape of the vertex.
         ctx.beginPath();
         this.path(ctx, view);
         ctx.lineWidth = selected ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
-        return ctx.isPointInPath(pos.x * view.scale, pos.y * view.scale) || ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
+        return ctx.isPointInPath(screenPos.x * view.scale, screenPos.y * view.scale) ||
+            ctx.isPointInStroke(screenPos.x * view.scale, screenPos.y * view.scale);
     }
 }
 
@@ -223,27 +222,30 @@ export class Edge {
         [this.v1, this.v2] = [this.v2, this.v1];
     }
 
-    path(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
+    path(ctx: GraphDrawingContext, view: Viewport): void {
         let v1 = view.transform(this.v1);
         let v2 = view.transform(this.v2);
+
         if (this.cp && this.v1 !== this.v2) {
             // Curved edge
             let cp = view.transform(this.cp);
             ctx.moveTo(v1.x, v1.y);
             ctx.quadraticCurveTo(cp.x, cp.y, v2.x, v2.y);
-        } else if (this.cp && this.v1 === this.v2) {
+        }
+        else if (this.cp && this.v1 === this.v2) {
             // Edge loop
             let cp = view.transform(this.cp);
             let radius = 0.5 * Math.hypot(v1.x - cp.x, v1.y - cp.y);
             ctx.ellipse(0.5 * (v1.x + cp.x), 0.5 * (v1.y + cp.y), radius, radius, 0, 0, 2 * Math.PI);
-        } else {
+        }
+        else {
             // Straight edge
             ctx.moveTo(v1.x, v1.y);
             ctx.lineTo(v2.x, v2.y);
         }
     }
 
-    pathArrow(ctx: GraphDrawingContext, view: Viewport = new Viewport()): void {
+    pathArrow(ctx: GraphDrawingContext, view: Viewport): void {
         let v1 = view.transform(this.v1);
         let v2 = view.transform(this.v2);
         let margin = this.v2.margin() * view.zoom;
@@ -251,6 +253,7 @@ export class Edge {
         let radians = this.arrowAngle * (Math.PI / 180);
         let cos = Math.cos(radians);
         let sin = Math.sin(radians);
+
         let dir;
         if (this.cp && this.v1 !== this.v2) {
             // Curved edge
@@ -258,7 +261,8 @@ export class Edge {
             dir = cp.sub(v2);
             // In most cases, it looks fine to just shift the arrow along
             // the tangent line.
-        } else if (this.cp && this.v1 === this.v2) {
+        }
+        else if (this.cp && this.v1 === this.v2) {
             // Edge loop
             let cp = view.transform(this.cp);
             // Shifting the arrow along the tangent line looks really bad
@@ -276,10 +280,12 @@ export class Edge {
                 return;
             }
             dir = offset.mul(sampleDist).add(offset.rotated90CCW().mul(Math.sqrt(discriminant)));
-        } else {
+        }
+        else {
             // Straight edge
             dir = v1.sub(v2);
         }
+
         dir = dir.normalized();
         let tip = v2.add(dir.mul(margin));
         ctx.moveTo(tip.x, tip.y);
@@ -288,23 +294,7 @@ export class Edge {
         ctx.lineTo(tip.x + len * (dir.x * cos + dir.y * sin), tip.y + len * (dir.y * cos - dir.x * sin));
     }
 
-    draw(ctx: GraphDrawingContext, hovered: boolean, selected: boolean, highlightColor: string, view: Viewport = new Viewport()): void {
-        // Draw the hover/selection outline, if applicable.
-        if (hovered || selected) {
-            ctx.beginPath();
-            this.path(ctx, view);
-            if (this.directed) {
-                this.pathArrow(ctx, view);
-            }
-            ctx.strokeStyle = highlightColor;
-            ctx.globalAlpha = selected ? hovered ? 1 : 0.8 : 0.6;
-            ctx.lineWidth = this.lineWidth * view.zoom + 4;
-            ctx.setLineDash([]);
-            ctx.stroke();
-        }
-
-        // Draw the edge, but avoid drawing the arrowhead as a dashed line
-        // since it tends to look a little silly.
+    draw(ctx: GraphDrawingContext, view: Viewport): void {
         ctx.beginPath();
         this.path(ctx, view);
         ctx.strokeStyle = this.stroke;
@@ -315,60 +305,80 @@ export class Edge {
         if (this.directed) {
             ctx.beginPath();
             this.pathArrow(ctx, view);
+            // Avoid drawing the arrowhead as a dashed line since it tends to
+            // look a little silly.
             ctx.setLineDash([]);
             ctx.stroke();
         }
-
-        // Draw control indicators for curved edges and edge loops.
-        if (selected && this.cp) {
-            let v1 = view.transform(this.v1);
-            let v2 = view.transform(this.v2);
-            let cp = view.transform(this.cp);
-
-            if (this.isCurve()) {
-                // Draw tangent lines to the control point. Each tangent line
-                // should be its own subpath so the dashes on the line don't
-                // shift around as the control point moves.
-                ctx.beginPath();
-                ctx.moveTo(v1.x, v1.y);
-                ctx.lineTo(cp.x, cp.y);
-                ctx.moveTo(v2.x, v2.y);
-                ctx.lineTo(cp.x, cp.y);
-                ctx.strokeStyle = highlightColor;
-                ctx.globalAlpha = 0.5;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([2, 5]);
-                ctx.stroke();
-            }
-    
-            // Draw the control point diamond.
-            ctx.beginPath();
-            ctx.moveTo(cp.x, cp.y + 8);
-            ctx.lineTo(cp.x + 8, cp.y);
-            ctx.lineTo(cp.x, cp.y - 8);
-            ctx.lineTo(cp.x - 8, cp.y);
-            ctx.closePath();
-            ctx.fillStyle = highlightColor;
-            ctx.globalAlpha = 0.8;
-            ctx.fill();
-        }
     }
 
-    contains(ctx: CanvasRenderingContext2D, pos: Vector2Like, selected: boolean, view: Viewport = new Viewport(), screen: boolean = false): boolean {
-        if (isNaN(pos.x) || isNaN(pos.y)) {
-            return false;
+    drawHighlight(ctx: GraphDrawingContext, view: Viewport, color: string, hovered: boolean, selected: boolean): void {
+        if (!hovered && !selected) {
+            return;
         }
-        if (!screen) {
-            pos = view.transform(pos);
+
+        ctx.beginPath();
+        this.path(ctx, view);
+        if (this.directed) {
+            this.pathArrow(ctx, view);
+        }
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = selected ? hovered ? 1 : 0.8 : 0.6;
+        ctx.lineWidth = this.lineWidth * view.zoom + 4;
+        ctx.setLineDash([]);
+        ctx.stroke();
+    }
+
+    drawControls(ctx: GraphDrawingContext, view: Viewport, color: string): void {
+        if (!this.cp) {
+            return;
+        }
+
+        let cp = view.transform(this.cp);
+
+        if (this.isCurve()) {
+            let v1 = view.transform(this.v1);
+            let v2 = view.transform(this.v2);
+
+            // Draw tangent lines to the control point. Each tangent line
+            // should be its own subpath so the dashes on the line don't
+            // shift around as the control point moves.
+            ctx.beginPath();
+            ctx.moveTo(v1.x, v1.y);
+            ctx.lineTo(cp.x, cp.y);
+            ctx.moveTo(v2.x, v2.y);
+            ctx.lineTo(cp.x, cp.y);
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.5;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([2, 5]);
+            ctx.stroke();
+        }
+
+        // Draw the control point diamond.
+        ctx.beginPath();
+        ctx.moveTo(cp.x, cp.y + 8);
+        ctx.lineTo(cp.x + 8, cp.y);
+        ctx.lineTo(cp.x, cp.y - 8);
+        ctx.lineTo(cp.x - 8, cp.y);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.8;
+        ctx.fill();
+    }
+
+    contains(ctx: CanvasRenderingContext2D, view: Viewport, screenPos: Vector2Like, selected: boolean, showControls: boolean): boolean {
+        if (isNaN(screenPos.x) || isNaN(screenPos.y)) {
+            return false;
         }
 
         // If the control point diamond is visible, test within a circular
         // region around it.
-        if (selected && this.cp) {
+        if (showControls && this.cp) {
             let cp = view.transform(this.cp);
             ctx.beginPath();
             ctx.ellipse(cp.x, cp.y, 10, 10, 0, 0, 2 * Math.PI);
-            if (ctx.isPointInPath(pos.x * view.scale, pos.y * view.scale)) {
+            if (ctx.isPointInPath(screenPos.x * view.scale, screenPos.y * view.scale)) {
                 return true;
             }
         }
@@ -380,7 +390,7 @@ export class Edge {
             this.pathArrow(ctx, view);
         }
         ctx.lineWidth = selected ? this.lineWidth * view.zoom + 4 : Math.max(this.lineWidth * view.zoom + 4, 12);
-        return ctx.isPointInStroke(pos.x * view.scale, pos.y * view.scale);
+        return ctx.isPointInStroke(screenPos.x * view.scale, screenPos.y * view.scale);
     }
 }
 

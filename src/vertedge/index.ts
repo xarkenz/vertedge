@@ -166,7 +166,7 @@ export class Vertedge {
 
     constructor(element: HTMLElement) {
         this.app = new GraphicalEditor(element)
-            .onRedraw(this.render.bind(this))
+            .onRedraw(this.redraw.bind(this))
             .onHoverMove(this.handleHoverMove.bind(this))
             .onDragStart(this.handleDragStart.bind(this))
             .onDragMove(this.handleDragMove.bind(this))
@@ -438,7 +438,7 @@ export class Vertedge {
         return vertices.concat(this.edges);
     }
 
-    render(): void {
+    redraw(): void {
         let element = this.app.tool === Tools.MOVE || this.app.tool === Tools.CAPTURE ? null : this.elementAtCursor();
         this.color = this.app.tool === Tools.DRAW ? Color.GREEN_DARK
             : this.app.tool === Tools.ERASE ? Color.RED
@@ -605,17 +605,19 @@ export class Vertedge {
                 svgCtx.lineCap = "round";
                 svgCtx.lineJoin = "round";
 
+                let view = new Viewport();
+
                 // TODO: users should be able to modify resolution through capture menu
                 this.edges.forEach(edge => {
                     if (!this.capture_selectionOnly.checked || this.selection.includes(edge)) {
-                        edge.draw(this.capture_preview.ctx, false, false, this.color);
-                        edge.draw(svgCtx, false, false, this.color);
+                        edge.draw(this.capture_preview.ctx, view);
+                        edge.draw(svgCtx, view);
                     }
                 });
                 this.vertices.forEach(vertex => {
                     if (!this.capture_selectionOnly.checked || this.selection.includes(vertex)) {
-                        vertex.draw(this.capture_preview.ctx, false, false, this.color);
-                        vertex.draw(svgCtx, false, false, this.color);
+                        vertex.draw(this.capture_preview.ctx, view);
+                        vertex.draw(svgCtx, view);
                     }
                 });
 
@@ -755,35 +757,67 @@ export class Vertedge {
             }
         }
 
-        // Original element position indicators
-        if (this.dragState && this.dragState.elements.length > 0) {
-            for (let { element } of this.dragState.elements) {
-                element.draw(this.app.ctx, false, false, this.color, this.app.view);
+        // Draw indicators for the original positions of vertices being dragged,
+        // or for the original shape and control point of an edge being dragged,
+        // but not both.
+        if (this.dragState) {
+            this.app.ctx.fillStyle = this.color;
+            this.app.ctx.strokeStyle = this.color;
+            this.app.ctx.lineWidth = 2;
 
-                if (element instanceof Edge && element.cp) {
-                    // Draw original control point position indicator.
-                    let cp = this.app.view.transform(element.cp);
+            for (let { element } of this.dragState.elements) {
+                if (element instanceof Vertex) {
+                    // Draw a dot to represent the vertex's original position.
+                    let pos = this.app.transform(element);
                     this.app.ctx.beginPath();
-                    this.app.ctx.moveTo(cp.x, cp.y + 6);
-                    this.app.ctx.lineTo(cp.x + 6, cp.y);
-                    this.app.ctx.lineTo(cp.x, cp.y - 6);
-                    this.app.ctx.lineTo(cp.x - 6, cp.y);
-                    this.app.ctx.closePath();
-                    this.app.ctx.strokeStyle = this.color;
+                    this.app.ctx.ellipse(pos.x, pos.y, 5, 5, 0, 0, 2 * Math.PI);
+                    this.app.ctx.globalAlpha = 0.7;
+                    this.app.ctx.fill();
+                }
+                else if (element instanceof Edge && this.dragState.elements.length === 1) {
+                    // Draw the edge as a dashed line to represent the edge's
+                    // original shape.
+                    this.app.ctx.beginPath();
+                    element.path(this.app.ctx, this.app.view);
                     this.app.ctx.globalAlpha = 0.5;
-                    this.app.ctx.lineWidth = 2;
-                    this.app.ctx.setLineDash([]);
+                    this.app.ctx.setLineDash([2, 4]);
                     this.app.ctx.stroke();
+
+                    if (element.cp) {
+                        // Draw a diamond outline to represent the control
+                        // point's original position.
+                        let cp = this.app.transform(element.cp);
+                        this.app.ctx.beginPath();
+                        this.app.ctx.moveTo(cp.x, cp.y + 6);
+                        this.app.ctx.lineTo(cp.x + 6, cp.y);
+                        this.app.ctx.lineTo(cp.x, cp.y - 6);
+                        this.app.ctx.lineTo(cp.x - 6, cp.y);
+                        this.app.ctx.closePath();
+                        this.app.ctx.setLineDash([]);
+                        this.app.ctx.stroke();
+                    }
                 }
             }
         }
 
         // Edges, then vertices (last index appears on top, vertices always in front of edges)
         this.edges.forEach(edge => {
-            edge.draw(this.app.ctx, !this.dragState && element === edge, this.selection.includes(edge), this.color, this.app.view);
+            let hovered = !this.dragState && element === edge;
+            let selected = this.selection.includes(edge);
+            let showControls = selected && this.selection.length === 1;
+
+            edge.drawHighlight(this.app.ctx, this.app.view, this.color, hovered, selected);
+            edge.draw(this.app.ctx, this.app.view);
+            if (showControls) {
+                edge.drawControls(this.app.ctx, this.app.view, this.color);
+            }
         });
         this.vertices.forEach(vertex => {
-            vertex.draw(this.app.ctx, !this.dragState && element === vertex, this.selection.includes(vertex), this.color, this.app.view);
+            let hovered = !this.dragState && element === vertex;
+            let selected = this.selection.includes(vertex);
+
+            vertex.drawHighlight(this.app.ctx, this.app.view, this.color, hovered, selected);
+            vertex.draw(this.app.ctx, this.app.view);
         });
 
         // Draw tool indicators
@@ -994,20 +1028,10 @@ export class Vertedge {
                 this.selection = [element];
             }
 
-            let elements = this.app.shiftKey ? [] : this.selection.map(item => {
-                // TODO: use a flag instead of changing the actual style
-                let orig = item.copy();
-                if ("fill" in orig) {
-                    orig.fill = Color.NONE;
-                }
-                orig.stroke = `${this.color}77`;
-                orig.lineWidth = 2;
-                orig.lineDash = [1, 2];
-                return {
-                    element: orig,
-                    index: item instanceof Vertex ? this.vertices.indexOf(item) : this.edges.indexOf(item),
-                };
-            });
+            let elements = this.app.shiftKey ? [] : this.selection.map(item => ({
+                element: item.copy(),
+                index: item instanceof Vertex ? this.vertices.indexOf(item) : this.edges.indexOf(item),
+            }));
 
             this.dragState = {
                 button: event.button,
@@ -1086,7 +1110,7 @@ export class Vertedge {
                         }
                         edge.cp.set(revert ? element.cp ?? this.app.locate(this.dragState) : this.snapToGrid((element.cp ?? this.app.locate(this.dragState)).add(dx / this.app.view.zoom, dy / this.app.view.zoom)));
 
-                        if (!edge.isLoop() && edge.v1 && edge.v2) {
+                        if (!edge.isLoop()) {
                             this.app.ctx.lineWidth = config.straightenCurveRadius * 2;
                             this.app.ctx.setLineDash([]);
                             this.app.ctx.beginPath();
@@ -1392,14 +1416,15 @@ export class Vertedge {
         return newVertex;
     }
 
-    elementAt(pos: Vector2, includeEdges: boolean = true): Vertex | Edge | null {
-        if (pos.isNaN()) {
+    elementAt(screenPos: Vector2, includeEdges: boolean = true): Vertex | Edge | null {
+        if (screenPos.isNaN()) {
             return null;
         }
 
         for (let i = this.vertices.length - 1; i >= 0; i--) {
             let vertex = this.vertices[i]!;
-            if (vertex.contains(this.app.ctx, pos, this.selection.includes(vertex), this.app.view, true)) {
+            let selected = this.selection.includes(vertex);
+            if (vertex.contains(this.app.ctx, this.app.view, screenPos, selected)) {
                 return vertex;
             }
         }
@@ -1407,7 +1432,9 @@ export class Vertedge {
         if (includeEdges) {
             for (let i = this.edges.length - 1; i >= 0; i--) {
                 let edge = this.edges[i]!;
-                if (edge.contains(this.app.ctx, pos, this.selection.includes(edge), this.app.view, true)) {
+                let selected = this.selection.includes(edge);
+                let showControls = selected && this.selection.length === 1;
+                if (edge.contains(this.app.ctx, this.app.view, screenPos, selected, showControls)) {
                     return edge;
                 }
             }
